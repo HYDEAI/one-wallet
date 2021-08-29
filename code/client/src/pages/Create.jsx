@@ -112,6 +112,7 @@ const Create = () => {
   const [address, setAddress] = useState() // '0x12345678901234567890'
   const [effectiveTime, setEffectiveTime] = useState()
   const [doubleOtp, setDoubleOtp] = useState(false)
+  const [appleWatchOtp, setAppleWatchOtp] = useState(false)
 
   const [durationVisible, setDurationVisible] = useState(false)
   const [section, setSection] = useState(sectionViews.setupOtp)
@@ -228,6 +229,7 @@ const Create = () => {
         hseed: ONEUtil.hexView(hseed),
         network,
         doubleOtp,
+        appleWatchOtp,
         ...securityParameters,
       }
       await storeLayers()
@@ -324,6 +326,16 @@ const Create = () => {
                   Use two codes to enhance security
                 </Hint>
                 <Tooltip title={<div>You will need to scan another QR-code on the next page. Each time you make a transaction, you will need to type in two 6-digit codes, which are shown simultaneously next to each other on your Google authenticator.<br /><br />This is advisable if you intend to make larger transactions with this wallet</div>}>
+                  <QuestionCircleOutlined />
+                </Tooltip>
+              </Space>
+            </Checkbox>
+            <Checkbox onChange={() => setAppleWatchOtp(!appleWatchOtp)}>
+              <Space>
+                <Hint>
+                  Use your apple watch to confirm transactions
+                </Hint>
+                <Tooltip title={<div>In addition to google authentication, you will need your apple watch to enter the code from your wallet</div>}>
                   <QuestionCircleOutlined />
                 </Tooltip>
               </Space>

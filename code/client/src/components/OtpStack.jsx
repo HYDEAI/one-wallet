@@ -18,7 +18,7 @@ export const useOtpState = () => {
   return { state: { otpRef, otp2Ref, otpInput, otp2Input, setOtpInput, setOtp2Input, resetOtp } }
 }
 
-export const OtpStack = ({ walletName, otpState, doubleOtp }) => {
+export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => {
   const location = useLocation()
   const { otpRef, otp2Ref, otpInput, otp2Input, setOtpInput, setOtp2Input, resetOtp } = otpState || useOtpState()
   useEffect(() => {
@@ -56,6 +56,14 @@ export const OtpStack = ({ walletName, otpState, doubleOtp }) => {
             onChange={setOtp2Input}
           />
           <Tooltip title={`from your Google Authenticator, i.e. ${walletName} (2nd)`}>
+            <QuestionCircleOutlined />
+          </Tooltip>
+        </Space>}
+      {appleWatchOtp &&
+        <Space align='baseline' size='large' style={{ marginTop: 16 }}>
+          <Label><Hint>Apple Watch Code</Hint></Label>
+          <Text>0000</Text>
+          <Tooltip title={`You will be prompted to enter a code on your apple watch`}>
             <QuestionCircleOutlined />
           </Tooltip>
         </Space>}

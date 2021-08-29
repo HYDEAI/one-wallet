@@ -63,6 +63,13 @@ const About = ({ address }) => {
             <Text>{wallet.majorVersion}.{wallet.minorVersion}</Text>
           </Col>
         </TallRow>}
+      {wallet.appleWatchOtp &&
+        <TallRow>
+          <Col span={isMobile ? 24 : 12}> <Title level={3}>Apple Watch Otp</Title></Col>
+          <Col>
+              <Text>Enabled</Text>
+          </Col>
+        </TallRow>}
       <>
         {backlinks.map((backlink, i) =>
           <TallRow align='middle' key={`backlink-${i}}`}>
