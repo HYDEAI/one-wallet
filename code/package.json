@@ -12,6 +12,7 @@
     "flatten": "truffle-flattener contracts/ONEWallet.sol > flattened/ONEWalletFlattened.sol"
   },
   "dependencies": {
+    "@chainlink/contracts": "^0.2.1",
     "@harmony-js/account": "^0.1.57",
     "@openzeppelin/contracts": "^4.2.0",
     "@truffle/hdwallet-provider": "^1.4.0",

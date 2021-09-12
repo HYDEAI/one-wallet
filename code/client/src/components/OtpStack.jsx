@@ -1,6 +1,7 @@
 import { Space, Tooltip } from 'antd'
 import { Hint, Label } from './Text'
 import OtpBox from './OtpBox'
+import AppleWatchOtp from './AppleWatchOtp'
 import { QuestionCircleOutlined } from '@ant-design/icons'
 import React, { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
@@ -37,7 +38,7 @@ export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => 
   return (
     <>
       <Space align='baseline' size='large' style={{ marginTop: 16 }}>
-        <Label><Hint>Code {doubleOtp ? '1' : ''}</Hint></Label>
+        <Label><Hint>Google Authenticator Code {doubleOtp ? '1' : ''}</Hint></Label>
         <OtpBox
           ref={otpRef}
           value={otpInput}
@@ -49,7 +50,7 @@ export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => 
       </Space>
       {doubleOtp &&
         <Space align='baseline' size='large' style={{ marginTop: 16 }}>
-          <Label><Hint>Code 2</Hint></Label>
+          <Label><Hint>Google Authenticator Code 2</Hint></Label>
           <OtpBox
             ref={otp2Ref}
             value={otp2Input}
@@ -60,13 +61,8 @@ export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => 
           </Tooltip>
         </Space>}
       {appleWatchOtp &&
-        <Space align='baseline' size='large' style={{ marginTop: 16 }}>
-          <Label><Hint>Apple Watch Code</Hint></Label>
-          <Text>0000</Text>
-          <Tooltip title={`You will be prompted to enter a code on your apple watch`}>
-            <QuestionCircleOutlined />
-          </Tooltip>
-        </Space>}
+        <AppleWatchOtp/>
+        }
     </>
   )
 }

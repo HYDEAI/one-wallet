@@ -36,6 +36,8 @@ const BuildProvider = (conf, useTruffle) => {
 
 module.exports = {
   // contracts_directory: '@ensdomains/subdomain-registrar-core/contracts/interfaces/IRegistrar.sol',
+  contracts_directory:'./contracts/',
+  contracts_build_directory:'./abis/',
   networks: {
     dev: {
       network_id: '*',
@@ -45,7 +47,7 @@ module.exports = {
     },
     ganache: {
       host: '127.0.0.1',
-      port: 7545,
+      port: 8545,
       network_id: '*',
     },
     rinkeby: {

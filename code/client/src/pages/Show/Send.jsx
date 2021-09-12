@@ -175,7 +175,7 @@ const Send = ({
             </Title>
             <Hint>USD</Hint>
           </Space>}
-        <OtpStack walletName={wallet.name} doubleOtp={doubleOtp} otpState={otpState} appleWatchOtp={appleWatchOtp} />
+        <OtpStack walletName={wallet.name} doubleOtp={doubleOtp} otpState={otpState} appleWatchOtp={wallet.appleWatchOtp} />
       </Space>
       <Row justify='end' style={{ marginTop: 24 }}>
         <Space>
