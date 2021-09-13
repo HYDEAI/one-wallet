@@ -9,6 +9,10 @@ const config = merge({}, baseConfig, {
   ipfs: {
     // gateway: process.env.IPFS_GATEWAY || 'https://dweb.link/ipfs/{{hash}}'
     gateway: process.env.IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs/{{hash}}'
+  },
+  appleWatchOtpService:{
+    registerDevice: process.env.DEVICE_OTP_REG || 'https://us-central1-brother-nft.cloudfunctions.net/hwalletreg/?n={{number}}',
+    writeOtp: process.env.DEVICE_OTP_SET || 'https://us-central1-brother-nft.cloudfunctions.net/harmony-authenticate/?id={{deviceId}}'
   }
 })
 

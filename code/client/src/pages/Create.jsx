@@ -6,6 +6,8 @@ import api from '../api'
 import ONEUtil from '../../../lib/util'
 import ONEConstants from '../../../lib/constants'
 import ONENames from '../../../lib/names'
+import axios from 'axios'
+
 // import { uniqueNamesGenerator, colors, animals } from 'unique-names-generator'
 import {
   Button,
@@ -18,8 +20,11 @@ import {
   Progress,
   Timeline,
   Checkbox,
-  Tooltip
+  Tooltip,
+  Form
 } from 'antd'
+import CountryPhoneInput, {ConfigProvider} from 'antd-country-phone-input'
+import en from 'world_countries_lists/data/en/world.json'
 import { RedoOutlined, LoadingOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import humanizeDuration from 'humanize-duration'
 import AnimatedSection from '../components/AnimatedSection'
@@ -35,6 +40,7 @@ import OtpBox from '../components/OtpBox'
 import { getAddress } from '@harmony-js/crypto'
 import AddressInput from '../components/AddressInput'
 const { Text, Link } = Typography
+import config from '.././config'
 
 // const genName = () => uniqueNamesGenerator({
 //   dictionaries: [colors, animals],
@@ -65,6 +71,11 @@ const sectionViews = {
 }
 
 const Create = () => {
+
+  const [userPhone, setUserPhone] = useState()
+  const [appleWatchOtpRegistered,setAppleWatchOtpRegistered] = useState()
+  const [appleWatchDeviceId,setAppleWatchDeviceId] = useState()
+
   const generateNewOtpName = () => genName(Object.keys(wallets).map(k => wallets[k].name))
 
   const { isMobile } = useWindowDimensions()
@@ -230,6 +241,7 @@ const Create = () => {
         network,
         doubleOtp,
         appleWatchOtp,
+        appleWatchDeviceId,
         ...securityParameters,
       }
       await storeLayers()
@@ -269,6 +281,26 @@ const Create = () => {
     }
     setWorker(worker)
   }, [])
+
+  //Additional auth device functions
+  const onFinish = (values) => {
+    setAppleWatchOtpRegistered(true)
+    let phoneNumber = values['reg'].code + '' + values['reg'].phone
+    //Make API call to server
+    const registerUrl = config.appleWatchOtpService.registerDevice.replace('{{number}}',phoneNumber)
+    axios.get(registerUrl).then((status)=>{
+      console.log(status)
+      setAppleWatchDeviceId(status['device_id']);
+    })
+    //Get device id, store in wallet meta data
+
+    message.info(`onFinish: ${values && JSON.stringify(values)}`);
+    message.info('onFinish: '+registerUrl);
+    setAppleWatchOtpRegistered()
+  };
+  const onFinishFailed = (errorInfo) => {
+    message.info(`onFinishFailed: ${errorInfo && JSON.stringify(errorInfo)}`);
+  };
 
   return (
     <>
@@ -340,6 +372,26 @@ const Create = () => {
                 </Tooltip>
               </Space>
             </Checkbox>
+            {appleWatchOtp && !appleWatchOtpRegistered &&
+                <Space>
+                  <ConfigProvider locale={en}>
+                    <Form
+                      onFinish={onFinish}
+                      onFinishFailed={onFinishFailed}
+                      initialValues={{
+                        reg:{ short:'ca',code:1,phone:''}
+                      }}
+                      >
+                        <Form.Item name="reg">
+                          <CountryPhoneInput/>
+                        </Form.Item>
+                        <Button type="primary" htmlType="submit">
+                          Register Device
+                        </Button>
+                      </Form>
+                  </ConfigProvider>
+                </Space>
+              }
           </Space>
         </Row>
       </AnimatedSection>
