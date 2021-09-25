@@ -2,8 +2,9 @@ const DEBUG = process.env.DEBUG
 
 module.exports = {
   appId: 'ONEWallet',
-  appName: 'ONE Wallet',
-  version: 'v0.9.1',
+  appName: '1wallet',
+  version: 'v0.12.3',
+  lastLibraryUpdateVersion: 'v0.12.2',
   minWalletVersion: parseInt(process.env.MIN_WALLET_VERSION || 3),
   minUpgradableVersion: parseInt(process.env.MIN_UPGRADABLE_WALLET_VERSION || 9),
   defaults: {
@@ -16,7 +17,7 @@ module.exports = {
   networks: {
     ...(DEBUG && {
       'eth-ganache': {
-        name: 'Ethereum Ganache',
+        name: 'Ganache',
         url: 'http://127.0.0.1:7545',
         // explorer: 'https://explorer.harmony.one/#/tx/{{txId}}',
       }
@@ -24,7 +25,7 @@ module.exports = {
     'harmony-mainnet': {
       name: 'Harmony Mainnet',
       url: 'https://api.s0.t.hmny.io',
-      explorer: 'https://explorer.harmony.one/#/tx/{{txId}}',
+      explorer: 'https://explorer.harmony.one/tx/{{txId}}',
       chainId: 1,
     },
     'harmony-testnet': {

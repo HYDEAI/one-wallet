@@ -8,7 +8,13 @@ import BN from 'bn.js'
 const { Text, Link } = Typography
 
 export default {
-  buildHelpers: ({ setStage, network, resetOtp, restart, resetWorker }) => {
+  buildHelpers: ({ setStage, network, resetOtp, resetWorker, onSuccess }) => {
+    const restart = () => {
+      setStage(-1)
+      resetOtp && resetOtp()
+      resetWorker && resetWorker()
+    }
+
     const onCommitError = (ex) => {
       Sentry.captureException(ex)
       console.error(ex)
@@ -47,12 +53,13 @@ export default {
     const onRevealSuccess = (txId) => {
       setStage(3)
       if (config.networks[network].explorer) {
-        const link = config.networks[network].explorer.replaceAll('{{txId}}', txId)
+        const link = config.networks[network].explorer.replace(/{{txId}}/, txId)
         message.success(<Text>Done! View transaction <Link href={link} target='_blank' rel='noreferrer'>{util.ellipsisAddress(txId)}</Link></Text>, 10)
       } else {
         message.success(<Text>Done! Copy transaction id: <Text copyable={{ text: txId }}>{util.ellipsisAddress(txId)} </Text></Text>, 10)
       }
-      setTimeout(() => restart && restart(), 3000)
+      setTimeout(() => restart(), 3000)
+      onSuccess && onSuccess(txId)
     }
 
     const prepareValidation = ({ state: { otpInput, otp2Input, doubleOtp, selectedToken, transferTo, inputAmount, transferAmount }, checkAmount = true, checkDest = true, checkOtp = true } = {}) => {
@@ -105,10 +112,10 @@ export default {
 
     const prepareProofFailed = () => {
       setStage(-1)
-      resetOtp()
+      resetOtp && resetOtp()
       resetWorker && resetWorker()
     }
 
-    return { onCommitError, onCommitFailure, onRevealFailure, onRevealError, onRevealAttemptFailed, onRevealSuccess, prepareValidation, prepareProofFailed }
+    return { onCommitError, onCommitFailure, onRevealFailure, onRevealError, onRevealAttemptFailed, onRevealSuccess, prepareValidation, prepareProofFailed, restart }
   }
 }

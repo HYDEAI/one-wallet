@@ -19,9 +19,10 @@ export const useOtpState = () => {
   return { state: { otpRef, otp2Ref, otpInput, otp2Input, setOtpInput, setOtp2Input, resetOtp } }
 }
 
-export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => {
+export const OtpStack = ({ wideLabel, walletName, otpState, doubleOtp, appleWatchOtp}) => {
   const location = useLocation()
   const { otpRef, otp2Ref, otpInput, otp2Input, setOtpInput, setOtp2Input, resetOtp } = otpState || useOtpState()
+
   useEffect(() => {
     // Focus on OTP 2 input box when first OTP input box is filled.
     if (otpInput.length === 6 && doubleOtp) {
@@ -36,9 +37,11 @@ export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => 
   }, [location])
 
   return (
-    <>
+    <Space direction='vertical'>
       <Space align='baseline' size='large' style={{ marginTop: 16 }}>
-        <Label><Hint>Google Authenticator Code {doubleOtp ? '1' : ''}</Hint></Label>
+        <Label wide={wideLabel}>
+          <Hint>Code {doubleOtp ? '1' : ''}</Hint>
+        </Label>
         <OtpBox
           ref={otpRef}
           value={otpInput}
@@ -50,7 +53,9 @@ export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => 
       </Space>
       {doubleOtp &&
         <Space align='baseline' size='large' style={{ marginTop: 16 }}>
-          <Label><Hint>Google Authenticator Code 2</Hint></Label>
+          <Label wide={wideLabel}>
+            <Hint>Code 2</Hint>
+          </Label>
           <OtpBox
             ref={otp2Ref}
             value={otp2Input}
@@ -63,6 +68,6 @@ export const OtpStack = ({ walletName, otpState, doubleOtp, appleWatchOtp }) => 
       {appleWatchOtp &&
         <AppleWatchOtp/>
         }
-    </>
+    </Space>
   )
 }

@@ -4,8 +4,11 @@ const contract = require('@truffle/contract')
 const { TruffleProvider } = require('@harmony-js/core')
 const { Account } = require('@harmony-js/account')
 const WalletGraph = require('../build/contracts/WalletGraph.json')
+const CommitManager = require('../build/contracts/CommitManager.json')
+const SignatureManager = require('../build/contracts/SignatureManager.json')
 const TokenTracker = require('../build/contracts/TokenTracker.json')
 const DomainManager = require('../build/contracts/DomainManager.json')
+const SpendingManager = require('../build/contracts/SpendingManager.json')
 const ONEWallet = require('../build/contracts/ONEWallet.json')
 const ONEWalletV5 = require('../build/contracts/ONEWalletV5.json')
 const ONEWalletV6 = require('../build/contracts/ONEWalletV6.json')
@@ -18,7 +21,7 @@ const contracts = {}
 const contractsV5 = {}
 const contractsV6 = {}
 const networks = []
-const libraryList = [DomainManager, TokenTracker, WalletGraph]
+const libraryList = [DomainManager, TokenTracker, WalletGraph, CommitManager, SignatureManager, SpendingManager]
 const libraryDeps = { WalletGraph: [DomainManager] }
 const libraries = {}
 
@@ -31,7 +34,7 @@ const ensureDir = async (p) => {
 }
 
 const initCachedLibraries = async () => {
-  const p = path.join(config.cache, ONEConfig.version)
+  const p = path.join(config.cache, ONEConfig.lastLibraryUpdateVersion || ONEConfig.version)
   await ensureDir(p)
   for (let network of networks) {
     libraries[network] = {}

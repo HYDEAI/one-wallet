@@ -8,6 +8,7 @@ import ONEConstants from '../../../lib/constants'
 import ONENames from '../../../lib/names'
 import axios from 'axios'
 
+import { MigrationPayload } from '../proto/oauthMigration'
 // import { uniqueNamesGenerator, colors, animals } from 'unique-names-generator'
 import {
   Button,
@@ -17,8 +18,6 @@ import {
   Slider,
   Image,
   message,
-  Progress,
-  Timeline,
   Checkbox,
   Tooltip,
   Input,
@@ -26,7 +25,7 @@ import {
 } from 'antd'
 import CountryPhoneInput, {ConfigProvider} from 'antd-country-phone-input'
 import en from 'world_countries_lists/data/en/world.json'
-import { RedoOutlined, LoadingOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { RedoOutlined, LoadingOutlined, QuestionCircleOutlined, SnippetsOutlined } from '@ant-design/icons'
 import humanizeDuration from 'humanize-duration'
 import AnimatedSection from '../components/AnimatedSection'
 import b32 from 'hi-base32'
@@ -34,12 +33,15 @@ import qrcode from 'qrcode'
 import storage from '../storage'
 import walletActions from '../state/modules/wallet/actions'
 import WalletConstants from '../constants/wallet'
-import util, { useWindowDimensions } from '../util'
+import util, { useWindowDimensions, OSType, generateOtpSeed } from '../util'
 import { handleAPIError, handleAddressError } from '../handler'
 import { Hint, Heading, InputBox, Warning } from '../components/Text'
 import OtpBox from '../components/OtpBox'
 import { getAddress } from '@harmony-js/crypto'
 import AddressInput from '../components/AddressInput'
+import WalletCreateProgress from '../components/WalletCreateProgress'
+import { TallRow } from '../components/Grid'
+import { FlashyButton } from '../components/Buttons'
 const { Text, Link } = Typography
 import config from '.././config'
 
@@ -58,9 +60,75 @@ const genName = (existingNames) => {
   return name
 }
 
-const generateOtpSeed = () => {
-  const otpSeedBuffer = new Uint8Array(20)
-  return window.crypto.getRandomValues(otpSeedBuffer)
+const OTPUriMode = {
+  STANDARD: 0,
+  MIGRATION: 1,
+  TOTP: 2, // seems deprecated, should not use unless it is for testing
+}
+
+const getQRCodeUri = (otpSeed, otpDisplayName, mode = OTPUriMode.STANDARD) => {
+  if (mode === OTPUriMode.STANDARD) {
+    // otpauth://TYPE/LABEL?PARAMETERS
+    return `otpauth://totp/${otpDisplayName}?secret=${b32.encode(otpSeed)}&issuer=Harmony`
+  }
+  if (mode === OTPUriMode.MIGRATION) {
+    const payload = MigrationPayload.create({
+      otpParameters: [{
+        issuer: 'Harmony',
+        secret: otpSeed,
+        name: otpDisplayName,
+        algorithm: MigrationPayload.Algorithm.ALGORITHM_SHA1,
+        digits: MigrationPayload.DigitCount.DIGIT_COUNT_SIX,
+        type: MigrationPayload.OtpType.OTP_TYPE_TOTP,
+      }],
+      version: 1,
+      batchIndex: 0,
+      batchSize: 1,
+    })
+    const bytes = MigrationPayload.encode(payload).finish()
+    const b64 = Buffer.from(bytes).toString('base64')
+    // console.log({ payload, bytes, b64 })
+    return `otpauth-migration://offline?data=${encodeURIComponent(b64)}`
+  }
+  return null
+}
+
+const getGoogleAuthenticatorAppLink = (os) => {
+  let link = 'https://apps.apple.com/us/app/google-authenticator/id388497605'
+  if (os === OSType.Android) {
+    link = 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2'
+  }
+  return <Link href={link} target='_blank' rel='noreferrer'>Google Authenticator</Link>
+}
+
+const getSecondCodeName = (name) => `${name} - 2nd`
+
+// not constructing qrCodeData on the fly (from seed) because generating a PNG takes noticeable amount of time. Caller needs to make sure qrCodeData is consistent with seed
+const buildQRCodeComponent = ({ seed, name, os, isMobile, qrCodeData }) => {
+  const image = (url) =>
+    <Image
+      src={qrCodeData}
+      preview={false}
+      width={isMobile ? 192 : 256}
+      style={isMobile && { border: '1px solid lightgrey', borderRadius: 8, boxShadow: '0px 0px 10px lightgrey' }}
+      onClick={url && (() => window.open(url, '_self').focus())}
+    />
+  let href
+  if (os === OSType.iOS) {
+    href = getQRCodeUri(seed, name, OTPUriMode.MIGRATION)
+  } else if (os === OSType.Android) {
+    href = getQRCodeUri(seed, name, OTPUriMode.STANDARD)
+  } else if (isMobile) {
+    // To test in more devices
+    href = getQRCodeUri(seed, name, OTPUriMode.MIGRATION)
+  }
+
+  return (
+    <Row justify='center'>
+      {isMobile && qrCodeData && image(href)}
+      {!isMobile && qrCodeData && image()}
+    </Row>
+  )
 }
 
 const sectionViews = {
@@ -71,50 +139,48 @@ const sectionViews = {
   walletSetupDone: 5
 }
 
-const Create = () => {
+const Create = ({ expertMode, showRecovery }) => {
 
+  // Additional device OTP
   const [userPhone, setUserPhone] = useState()
   const [smsSent,setSmsSent] = useState()
   const [appleWatchOtpRegistered,setAppleWatchOtpRegistered] = useState()
   const [appleWatchDeviceId,setAppleWatchDeviceId] = useState()
   const [deviceRegistered ,setDeviceRegistered] = useState()
 
-  const generateNewOtpName = () => genName(Object.keys(wallets).map(k => wallets[k].name))
-
-  const { isMobile } = useWindowDimensions()
+  // eslint-disable-next-line no-unused-vars
+  const dev = useSelector(state => state.wallet.dev)
+  const { isMobile, os } = useWindowDimensions()
   const dispatch = useDispatch()
   const history = useHistory()
   const network = useSelector(state => state.wallet.network)
   const wallets = useSelector(state => state.wallet.wallets)
+  const generateNewOtpName = () => genName(Object.keys(wallets).map(k => wallets[k].name))
   const [name, setName] = useState(generateNewOtpName())
   // eslint-disable-next-line no-unused-vars
   const [seed, setSeed] = useState(generateOtpSeed())
   // eslint-disable-next-line no-unused-vars
   const [seed2, setSeed2] = useState(generateOtpSeed())
   const [duration, setDuration] = useState(WalletConstants.defaultDuration)
-
-  const oneWalletTreasuryOneAddress = util.safeOneAddress(WalletConstants.oneWalletTreasury.address)
+  const [showRecoveryDetail, setShowRecoveryDetail] = useState(false)
 
   // Used for Recovery address setup. Only used when user does not choose a Recovery address.
   const oneWalletTreasurySelectOption = {
-    value: oneWalletTreasuryOneAddress,
-    label: `(1wallet Treasury) ${oneWalletTreasuryOneAddress}`
+    value: WalletConstants.oneWalletTreasury.address,
+    label: `(${WalletConstants.oneWalletTreasury.label}) ${util.safeOneAddress(WalletConstants.oneWalletTreasury.address)}`
   }
 
   // A valid wallet of user's wallets in the network can be used as default recovery wallet.
-  const defaultRecoveryWallet = Object.keys(wallets)
-    .map((address) => ({ ...wallets[address], oneAddress: util.safeOneAddress(wallets[address].address) }))
-    .find((wallet) => util.safeOneAddress(wallet.address) && wallet.network === network)
+  // const defaultRecoveryWallet = Object.keys(wallets)
+  //   .map((address) => ({ ...wallets[address], oneAddress: util.safeOneAddress(wallets[address].address) }))
+  //   .find((wallet) => util.safeOneAddress(wallet.address) && wallet.network === network && !wallet.temp)
 
-  const defaultRecoveryAddress = defaultRecoveryWallet
-    ? {
-        value: defaultRecoveryWallet.oneAddress,
-        label: `(${defaultRecoveryWallet.name}) ${defaultRecoveryWallet.oneAddress}`
-      }
-    : oneWalletTreasurySelectOption
+  // const defaultRecoveryAddress = defaultRecoveryWallet ? { value: defaultRecoveryWallet.oneAddress, label: `(${defaultRecoveryWallet.name}) ${defaultRecoveryWallet.oneAddress}` } : oneWalletTreasurySelectOption
+  const defaultRecoveryAddress = oneWalletTreasurySelectOption
 
   const [lastResortAddress, setLastResortAddress] = useState(defaultRecoveryAddress)
-  const [dailyLimit] = useState(WalletConstants.defaultDailyLimit)
+  const [spendingLimit, setSpendingLimit] = useState(WalletConstants.defaultSpendingLimit) // ONEs, number
+  const [spendingInterval, setSpendingInterval] = useState(WalletConstants.defaultSpendingInterval) // seconds, number
 
   const [worker, setWorker] = useState()
   const [root, setRoot] = useState()
@@ -133,7 +199,6 @@ const Create = () => {
   const [qrCodeData, setQRCodeData] = useState()
   const [secondOtpQrCodeData, setSecondOtpQrCodeData] = useState()
   const [otp, setOtp] = useState('')
-
   const [deploying, setDeploying] = useState()
 
   const otpRef = useRef()
@@ -143,15 +208,10 @@ const Create = () => {
     minorVersion: ONEConstants.MinorVersion,
   })
 
-  const getQRCodeUri = (otpSeed, otpDisplayName) => {
-    // otpauth://TYPE/LABEL?PARAMETERS
-    return `otpauth://totp/${otpDisplayName}?secret=${b32.encode(otpSeed)}&issuer=Harmony`
-  }
-
   useEffect(() => {
     (async function () {
-      const otpUri = getQRCodeUri(seed, name)
-      const secondOtpUri = getQRCodeUri(seed2, `${name} - 2nd`)
+      const otpUri = getQRCodeUri(seed, name, OTPUriMode.MIGRATION)
+      const secondOtpUri = getQRCodeUri(seed2, getSecondCodeName(name), OTPUriMode.MIGRATION)
       const otpQrCodeData = await qrcode.toDataURL(otpUri, { errorCorrectionLevel: 'low', width: isMobile ? 192 : 256 })
       const secondOtpQrCodeData = await qrcode.toDataURL(secondOtpUri, { errorCorrectionLevel: 'low', width: isMobile ? 192 : 256 })
       setQRCodeData(otpQrCodeData)
@@ -161,24 +221,64 @@ const Create = () => {
 
   useEffect(() => {
     if (section === sectionViews.setupOtp && worker) {
-      console.log('Posting to worker. Security parameters:', securityParameters)
+      // console.log('Posting to worker. Security parameters:', securityParameters)
       const t = Math.floor(Date.now() / WalletConstants.interval) * WalletConstants.interval
+      const salt = ONEUtil.hexView(generateOtpSeed())
       setEffectiveTime(t)
-      worker && worker.postMessage({
-        seed,
-        seed2: doubleOtp && seed2,
-        effectiveTime: t,
-        duration,
-        slotSize,
-        interval: WalletConstants.interval,
-        ...securityParameters,
-      })
+      if (worker) {
+        worker.postMessage({
+          salt,
+          seed,
+          seed2: doubleOtp && seed2,
+          effectiveTime: t,
+          duration,
+          slotSize,
+          interval: WalletConstants.interval,
+          ...securityParameters,
+        })
+        setRoot(undefined)
+        setHseed(undefined)
+        setLayers(undefined)
+        setSlotSize(1)
+        worker.onmessage = (event) => {
+          const { status, current, total, stage, result, salt: workerSalt } = event.data
+          if (workerSalt && workerSalt !== salt) {
+            // console.log(`Discarding outdated worker result (salt=${workerSalt}, expected=${salt})`)
+            return
+          }
+          if (status === 'working') {
+            // console.log(`Completed ${(current / total * 100).toFixed(2)}%`)
+            setProgress(Math.round(current / total * 100))
+            setProgressStage(stage)
+          }
+          if (status === 'done') {
+            const { hseed, root, layers, maxOperationsPerInterval } = result
+            setRoot(root)
+            setHseed(hseed)
+            setLayers(layers)
+            setSlotSize(maxOperationsPerInterval)
+            // console.log('Received created wallet from worker:', result)
+          }
+        }
+      }
     }
-  }, [section, worker])
+  }, [section, worker, doubleOtp])
 
   useEffect(() => {
     const settingUpSecondOtp = section === sectionViews.setupSecondOtp
     if (otp.length !== 6) {
+      return
+    }
+    if (otp.toLowerCase() === '0x1337' || otp.toLowerCase() === 'expert') {
+      history.push(Paths.create2)
+      message.success('Expert mode unlocked')
+      setOtp('')
+      return
+    }
+    if (expertMode && (otp === '0x0000' || otp === 'normal')) {
+      history.push(Paths.create)
+      message.success('Expert mode disabled')
+      setOtp('')
       return
     }
     const currentSeed = settingUpSecondOtp ? seed2 : seed
@@ -205,7 +305,7 @@ const Create = () => {
   }
 
   const deploy = async () => {
-    if (!root) {
+    if (!(root && hseed && layers && slotSize)) {
       message.error('Cannot deploy wallet. Error: root is not set.')
       return
     }
@@ -228,9 +328,10 @@ const Create = () => {
         lifespan: duration / WalletConstants.interval,
         slotSize,
         lastResortAddress: normalizedAddress,
-        dailyLimit: ONEUtil.toFraction(dailyLimit).toString()
+        spendingLimit: ONEUtil.toFraction(spendingLimit).toString(),
+        spendingInterval,
       })
-      console.log('Deployed. Received contract address', address)
+      // console.log('Deployed. Received contract address', address)
       const wallet = {
         name,
         address,
@@ -239,13 +340,17 @@ const Create = () => {
         slotSize,
         effectiveTime,
         lastResortAddress: normalizedAddress,
-        dailyLimit: ONEUtil.toFraction(dailyLimit).toString(),
+        spendingLimit: ONEUtil.toFraction(spendingLimit).toString(),
         hseed: ONEUtil.hexView(hseed),
+        spendingInterval: spendingInterval * 1000,
+        majorVersion: ONEConstants.MajorVersion,
+        minorVersion: ONEConstants.MinorVersion,
         network,
         doubleOtp,
         appleWatchOtp,
         appleWatchDeviceId,
         ...securityParameters,
+        expert: !!expertMode,
       }
       await storeLayers()
       dispatch(walletActions.updateWallet(wallet))
@@ -266,22 +371,6 @@ const Create = () => {
 
   useEffect(() => {
     const worker = new Worker('/ONEWalletWorker.js')
-    worker.onmessage = (event) => {
-      const { status, current, total, stage, result } = event.data
-      if (status === 'working') {
-        // console.log(`Completed ${(current / total * 100).toFixed(2)}%`)
-        setProgress(Math.round(current / total * 100))
-        setProgressStage(stage)
-      }
-      if (status === 'done') {
-        const { hseed, root, layers, maxOperationsPerInterval } = result
-        setRoot(root)
-        setHseed(hseed)
-        setLayers(layers)
-        setSlotSize(maxOperationsPerInterval)
-        console.log('Received created wallet from worker:', result)
-      }
-    }
     setWorker(worker)
   }, [])
 
@@ -324,6 +413,12 @@ const Create = () => {
   const onFinishFailed = (errorInfo) => {
     message.info(`onFinishFailed: ${errorInfo && JSON.stringify(errorInfo)}`);
   };
+  useEffect(() => {
+    if (section === sectionViews.prepareWallet && !showRecovery &&
+      root && hseed && slotSize && layers) {
+      deploy()
+    }
+  }, [section, root, hseed, layers, slotSize])
 
   return (
     <>
@@ -358,43 +453,24 @@ const Create = () => {
         <Row>
           <Space direction='vertical'>
             {/* <Heading>Now, scan the QR code with your Google Authenticator</Heading> */}
-            <Heading>Create Your 1wallet</Heading>
-            <Hint>You need the 6-digit code from Google authenticator to transfer funds. You can restore your wallet using Google authenticator on any device.</Hint>
-            <Row justify='center'>
-              {qrCodeData && <Image src={qrCodeData} preview={false} width={isMobile ? 192 : 256} />}
-            </Row>
+            <Heading level={isMobile ? 4 : 2}>Create Your 1wallet</Heading>
+            {!isMobile && <Hint>Scan the QR code to setup {getGoogleAuthenticatorAppLink(os)}. You need it to use, copy, or restore the wallet </Hint>}
+            {isMobile && <Hint>Tap QR code to setup {getGoogleAuthenticatorAppLink(os)}. You need it to use, copy, or restore the wallet</Hint>}
+            {buildQRCodeComponent({ seed, name, os, isMobile, qrCodeData })}
           </Space>
         </Row>
-        <Row>
-          <Space direction='vertical' size='large' align='center'>
-            <Hint>After you are done, type in the 6-digit code from Google authenticator</Hint>
-            <Hint>Code for <b>Harmony ({name})</b></Hint>
+        <Row style={{ marginTop: 16 }}>
+          <Space direction='vertical' size='large' align='center' style={{ width: '100%' }}>
+            <Hint>Copy the 6-digit code from authenticator</Hint>
+            <Hint style={{ fontSize: isMobile ? 12 : undefined }}>
+              Code for <b>Harmony ({name})</b>
+            </Hint>
             <OtpBox
-              shouldAutoFocus
+              shouldAutoFocus={!isMobile}
               ref={otpRef}
               value={otp}
               onChange={setOtp}
             />
-            <Checkbox onChange={() => setDoubleOtp(!doubleOtp)}>
-              <Space>
-                <Hint>
-                  Use two codes to enhance security
-                </Hint>
-                <Tooltip title={<div>You will need to scan another QR-code on the next page. Each time you make a transaction, you will need to type in two 6-digit codes, which are shown simultaneously next to each other on your Google authenticator.<br /><br />This is advisable if you intend to make larger transactions with this wallet</div>}>
-                  <QuestionCircleOutlined />
-                </Tooltip>
-              </Space>
-            </Checkbox>
-            <Checkbox onChange={() => setAppleWatchOtp(!appleWatchOtp)}>
-              <Space>
-                <Hint>
-                  Use your apple watch to confirm transactions
-                </Hint>
-                <Tooltip title={<div>In addition to google authentication, you will need your apple watch to enter the code from your wallet</div>}>
-                  <QuestionCircleOutlined />
-                </Tooltip>
-              </Space>
-            </Checkbox>
             {appleWatchOtp && !appleWatchOtpRegistered &&
                 <Space>
                   <ConfigProvider locale={en}>
@@ -435,6 +511,18 @@ const Create = () => {
                   ✅ Phone and Apple Device ready to link to this wallet.
                 </Space>
               }
+            {isMobile && <Button type='default' shape='round' icon={<SnippetsOutlined />} onClick={() => { navigator.clipboard.readText().then(t => setOtp(t)) }}>Paste from Clipboard</Button>}
+            {expertMode &&
+              <Checkbox onChange={() => setDoubleOtp(!doubleOtp)}>
+                <Space>
+                  <Hint style={{ fontSize: isMobile ? 12 : undefined }}>
+                    Use two codes to enhance security
+                  </Hint>
+                  <Tooltip title={<div>You will need to scan another QR-code on the next page. Each time you make a transaction, you will need to type in two 6-digit codes, which are shown simultaneously next to each other on your Google Authenticator.<br /><br />This is advisable if you intend to make larger transactions with this wallet</div>}>
+                    <QuestionCircleOutlined />
+                  </Tooltip>
+                </Space>
+              </Checkbox>}
           </Space>
         </Row>
       </AnimatedSection>
@@ -442,22 +530,21 @@ const Create = () => {
         <Row>
           <Space direction='vertical'>
             <Heading>Create Your 1wallet (second code)</Heading>
-            <Hint align='center'>Scan with your Google Authenticator to setup the <b>second</b> code</Hint>
-            <Row justify='center'>
-              {secondOtpQrCodeData && <Image src={secondOtpQrCodeData} preview={false} width={isMobile ? 192 : 256} />}
-            </Row>
+            <Hint align='center'>{isMobile ? 'Tap' : 'Scan'} to setup the <b>second</b> code</Hint>
+            {buildQRCodeComponent({ seed: seed2, name: getSecondCodeName(name), os, isMobile, qrCodeData: secondOtpQrCodeData })}
           </Space>
         </Row>
         <Row>
-          <Space direction='vertical' size='large' align='center'>
-            <Hint>Type in the <b>second</b> 6-digit code from Google authenticator</Hint>
-            <Hint>Code for <b>Harmony ({name} - 2nd)</b></Hint>
+          <Space direction='vertical' size='large' align='center' style={{ width: '100%' }}>
+            <Hint>Copy the 6-digit code from authenticator</Hint>
+            <Hint style={{ fontSize: isMobile ? 12 : undefined }}>Code for <b>Harmony ({getSecondCodeName(name)})</b></Hint>
             <OtpBox
-              shouldAutoFocus
+              shouldAutoFocus={!isMobile}
               ref={otpRef}
               value={otp}
               onChange={setOtp}
             />
+            {isMobile && <Button type='default' shape='round' icon={<SnippetsOutlined />} onClick={() => { navigator.clipboard.readText().then(t => setOtp(t)) }}>Paste from Clipboard</Button>}
           </Space>
         </Row>
       </AnimatedSection>
@@ -467,66 +554,85 @@ const Create = () => {
             <Heading>Prepare Your 1wallet</Heading>
           </Space>
         </Row>
-        {/* <Row style={{ marginBottom: 16 }}> */}
-        {/*  <Space direction='vertical' size='small'> */}
-        {/*    <Hint>Set up a daily spending limit:</Hint> */}
-        {/*    <InputBox margin={16} width={200} value={dailyLimit} onChange={({ target: { value } }) => setDailyLimit(parseInt(value || 0))} suffix='ONE' /> */}
-        {/*  </Space> */}
-        {/* </Row> */}
-        <Row style={{ marginBottom: 48 }}>
-          <Space direction='vertical' size='small'>
-            <Hint>Set up a fund recovery address:</Hint>
-            <AddressInput
-              addressValue={lastResortAddress}
-              setAddressCallback={setLastResortAddress}
-              extraSelectOptions={[{
-                address: WalletConstants.oneWalletTreasury.address,
-                label: '1wallet treasury'
-              }]}
-            />
-            <Hint>
-              {lastResortAddress.value !== WalletConstants.oneWalletTreasury.address && <span style={{ color: 'red' }}>You cannot change this later.</span>}
-              If you lost your authenticator, your can recover funds to this address. You can also send 1.0 ONE from the recovery address to trigger auto-recovery
-            </Hint>
-            {lastResortAddress.value === WalletConstants.oneWalletTreasury.address &&
-              <Warning style={{ marginTop: 24 }}>
-                We suggest you choose your own address, such as an account from Harmony CLI wallet or Chrome Extension wallet. <br /><br /> 1wallet treasury generally cannot recover your funds except in rare cases which many users are affected by software bugs. <br /><br /> 1wallet treasury is managed by 5 reputable owners and requires a majority vote to make any transfer.<br /><br />If you choose 1wallet treasury as the recovery address, you have an opportunity to change it later in your wallet.
-              </Warning>}
-          </Space>
-        </Row>
+        {expertMode &&
+          <Row style={{ marginBottom: 16 }}>
+            <Space direction='vertical' size='small'>
+              <Hint>Set up a spending limit:</Hint>
+              <Space align='baseline' direction={isMobile ? 'vertical' : 'horizontal'}>
+                <InputBox
+                  margin={16} width={160} value={spendingLimit}
+                  onChange={({ target: { value } }) => setSpendingLimit(parseInt(value || 0))} suffix='ONE'
+                />
+                <Space align='baseline'>
+                  <Hint>per</Hint>
+                  <InputBox
+                    margin={16} width={128} value={spendingInterval}
+                    onChange={({ target: { value } }) => setSpendingInterval(parseInt(value || 0))}
+                  />
+                  <Hint>seconds</Hint>
+                </Space>
+              </Space>
+              <Row justify='end'>
+                <Hint>≈ {humanizeDuration(spendingInterval * 1000, { largest: 2, round: true })}</Hint>
+              </Row>
+
+            </Space>
+          </Row>}
+        {showRecovery &&
+          <Row style={{ marginBottom: 24 }}>
+            {!showRecoveryDetail &&
+              <Space>
+                <Button style={{ padding: 0 }} type='link' onClick={() => setShowRecoveryDetail(true)}>Set up a recovery address?</Button>
+                <Tooltip title={'It is where you could send your money to if you lost the authenticator. You don\'t have to configure this. By default it goes to 1wallet DAO'}>
+                  <QuestionCircleOutlined />
+                </Tooltip>
+
+              </Space>}
+            {showRecoveryDetail &&
+              <Space direction='vertical' size='small' style={{ width: '100%' }}>
+                <Hint>Set up a fund recovery address (it's public):</Hint>
+                <AddressInput
+                  addressValue={lastResortAddress}
+                  setAddressCallback={setLastResortAddress}
+                  extraSelectOptions={[{
+                    address: WalletConstants.oneWalletTreasury.address,
+                    label: WalletConstants.oneWalletTreasury.label
+                  }]}
+                />
+                <Hint>
+                  {lastResortAddress.value !== WalletConstants.oneWalletTreasury.address && <span style={{ color: 'red' }}>This is permanent. </span>}
+                  If you lost access, you can still send your assets there or use <Link href='https://github.com/polymorpher/one-wallet/releases/tag/v0.2' target='_blank' rel='noreferrer'>auto-recovery</Link>
+                </Hint>
+                {lastResortAddress.value === WalletConstants.oneWalletTreasury.address &&
+                  <Warning style={{ marginTop: 24 }}>
+                    Please use your own address if you can. 1wallet DAO is controlled by Harmony team. They may help you recover funds as the last resort.
+                  </Warning>}
+              </Space>}
+          </Row>}
         <Row style={{ marginBottom: 32 }}>
           <Space direction='vertical'>
-            <Space>
-              <Button disabled={!root || deploying} type='primary' shape='round' size='large' onClick={() => deploy()}>Create Now</Button>
-              {deploying && <LoadingOutlined />}
-            </Space>
-            {!root &&
-              <>
-                <Hint>One moment... we are still preparing your wallet</Hint>
-                <Space size='large' direction={isMobile && 'vertical'}>
-                  <Progress
-                    type='circle'
-                    strokeColor={{
-                      '0%': '#108ee9',
-                      '100%': '#87d068',
-                    }}
-                    percent={progress}
-                  />
-                  <Space direction='vertical'>
-                    <Timeline pending={progressStage < 2 && 'Securing your keyless 1wallet'}>
-                      <Timeline.Item color={progressStage < 1 ? 'grey' : 'green'}>Securing the wallet</Timeline.Item>
-                      <Timeline.Item color={progressStage < 2 ? 'grey' : 'green'}>Preparing signatures</Timeline.Item>
-                    </Timeline>
-                  </Space>
-                </Space>
-              </>}
+            {showRecovery &&
+              <Space>
+                <FlashyButton
+                  disabled={!root || deploying} type='primary' shape='round' size='large'
+                  onClick={() => deploy()}
+                >Confirm: Create Now
+                </FlashyButton>
+                {deploying && <LoadingOutlined />}
+              </Space>}
+            {!showRecovery &&
+              <TallRow>
+                {(deploying || !root) && <Space><Text>Working on your 1wallet...</Text><LoadingOutlined /></Space>}
+                {(!deploying && root) && <Text>Your 1wallet is ready!</Text>}
+              </TallRow>}
+            {!root && <WalletCreateProgress progress={progress} isMobile={isMobile} progressStage={progressStage} />}
           </Space>
         </Row>
         <Row>
           <Space direction='vertical'>
             <Hint>No private key. No mnemonic. Simple and Secure. </Hint>
             <Hint>To learn more, visit <Link href='https://github.com/polymorpher/one-wallet/wiki'>1wallet Wiki</Link></Hint>
-            <Hint>In Beta, your wallet is subject to a daily spending limit of {WalletConstants.defaultDailyLimit} ONE</Hint>
+            <Hint>In Beta, your wallet is subject to a daily spending limit of {WalletConstants.defaultSpendingLimit} ONE</Hint>
           </Space>
         </Row>
       </AnimatedSection>

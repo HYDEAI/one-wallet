@@ -2,7 +2,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import React, { useState } from 'react'
 import ONEConstants from '../../../../lib/constants'
 import ONEUtil from '../../../../lib/util'
-import util from '../../util'
+import util, { useWindowDimensions } from '../../util'
 import config from '../../config'
 import BN from 'bn.js'
 import { Button, Card, Typography, Space, message, Row, Steps } from 'antd'
@@ -25,7 +25,8 @@ const CardStyle = {
   left: 0,
   top: 0,
   zIndex: 100,
-  backdropFilter: 'blur(10px)'
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)'
 }
 
 const Upgrade = ({ address, onClose }) => {
@@ -40,15 +41,17 @@ const Upgrade = ({ address, onClose }) => {
   const requireUpdate = majorVersion && (!(parseInt(majorVersion) >= ONEConstants.MajorVersion) || parseInt(minorVersion) === 0)
   const canUpgrade = majorVersion >= config.minUpgradableVersion
   const latestVersion = { majorVersion: ONEConstants.MajorVersion, minorVersion: ONEConstants.MinorVersion }
-  const { dailyLimit } = wallet
-  const { formatted: dailyLimitFormatted } = util.computeBalance(dailyLimit)
+  const maxSpend = util.getMaxSpending(wallet)
+  const { formatted: maxSpendFormatted } = util.computeBalance(maxSpend)
   const balances = useSelector(state => state.wallet.balances)
   const { balance, formatted } = util.computeBalance(balances[address])
   const oneLastResort = util.safeOneAddress(lastResortAddress)
   const oneAddress = util.safeOneAddress(address)
-  const balanceGreaterThanLimit = new BN(balance).gt(new BN(dailyLimit))
-  const excessBalance = balanceGreaterThanLimit ? new BN(balance).sub(new BN(dailyLimit)) : new BN(0)
-  const { formatted: excessBalanceFormatted } = util.computeBalance(excessBalance)
+  const balanceGreaterThanLimit = new BN(balance).gt(new BN(maxSpend))
+
+  const excessBalance = balanceGreaterThanLimit ? new BN(balance).sub(new BN(maxSpend)) : new BN(0)
+  const { formatted: excessBalanceFormatted } = util.computeBalance(excessBalance.toString())
+  const { isMobile } = useWindowDimensions()
 
   const { state: otpState } = useOtpState()
   const { otpInput, otp2Input } = otpState
@@ -68,7 +71,8 @@ const Upgrade = ({ address, onClose }) => {
       lifespan,
       maxOperationsPerInterval,
       lastResortAddress,
-      dailyLimit,
+      spendingLimit,
+      spendingInterval
     } = await api.blockchain.getWallet({ address, raw: true })
     const backlinks = await api.blockchain.getBacklinks({ address })
 
@@ -80,7 +84,8 @@ const Upgrade = ({ address, onClose }) => {
       lifespan,
       slotSize: maxOperationsPerInterval,
       lastResortAddress,
-      dailyLimit,
+      spendingLimit: spendingLimit.toString(),
+      spendingInterval: spendingInterval.toString(),
       backlinks: [...backlinks, address]
     })
     const { otp, otp2, invalidOtp2, invalidOtp } = prepareValidation({ state: { otpInput, otp2Input, doubleOtp: wallet.doubleOtp }, checkAmount: false, checkDest: false }) || {}
@@ -131,10 +136,20 @@ const Upgrade = ({ address, onClose }) => {
 
   return (
     <Card style={CardStyle} bodyStyle={{ height: '100%' }}>
-      <Space direction='vertical' align='center' size='large' style={{ height: '100%', justifyContent: 'center', display: 'flex' }}>
+      <Space
+        direction='vertical'
+        align='center'
+        size='large'
+        style={{
+          height: '100%',
+          justifyContent: isMobile ? 'start' : 'center',
+          paddingTop: isMobile && 32,
+          display: 'flex'
+        }}
+      >
         {!confirmUpgradeVisible &&
           <>
-            <Title>An upgrade is available.</Title>
+            <Title level={isMobile ? 4 : 2}>An upgrade is available.</Title>
             <Text>Your wallet: v{ONEUtil.getVersion(wallet)}</Text>
             <Text>Latest version: v{ONEUtil.getVersion(latestVersion)}</Text>
             <Button type='primary' shape='round' size='large' onClick={() => setConfirmUpgradeVisible(true)}>Upgrade Now</Button>
@@ -151,16 +166,17 @@ const Upgrade = ({ address, onClose }) => {
                 <li>Your will get a new wallet address. Everything else remains the same (e.g. authenticator)</li>
                 <li>From now on, everything sent to your old address will be forwarded to the new address</li>
                 <li>All your collectibles will be immediately transferred to your new address</li>
-                <li>All tracked tokens will be immediately transferred to the new address </li>
+                <li>All tokens you sent (not swapped) at least once will be transferred to the new address </li>
                 <li>Your new address can fully control your old address, and claim anything not transferred</li>
                 {!balanceGreaterThanLimit && <li> All your funds ({formatted} ONE) will be immediately transferred to your new address</li>}
+                <li>If there is anything not automatically transferred, you will be able to reclaim them after upgrade</li>
               </ul>
             </Text>
             {balanceGreaterThanLimit &&
               <Text type='danger'>
                 You have a high value wallet. There are some extra steps for you:
                 <ul>
-                  <li> {dailyLimitFormatted} ONE will be immediately transferred to your new address</li>
+                  <li> {maxSpendFormatted} ONE will be immediately transferred to your new address</li>
                   <li> You need to approve transferring the rest ({excessBalanceFormatted} ONE) by sending some ONE to the old address</li>
                   <li> Your recovery address is {oneLastResort}</li>
                   <li> Send any amount (except 1.0 ONE) to {oneAddress}</li>

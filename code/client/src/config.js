@@ -8,12 +8,14 @@ const config = merge({}, baseConfig, {
   debug: process.env.DEBUG,
   ipfs: {
     // gateway: process.env.IPFS_GATEWAY || 'https://dweb.link/ipfs/{{hash}}'
-    gateway: process.env.IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs/{{hash}}'
+    // gateway: process.env.IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs/{{hash}}'
+    gateway: process.env.IPFS_GATEWAY || 'https://1wallet.mypinata.cloud/ipfs/{{hash}}'
   },
   appleWatchOtpService:{
     registerDevice: process.env.DEVICE_OTP_REG || 'https://us-central1-brother-nft.cloudfunctions.net/hwalletreg/?n={{number}}',
     writeOtp: process.env.DEVICE_OTP_SET || 'https://us-central1-brother-nft.cloudfunctions.net/harmony-authenticate/?id={{deviceId}}'
-  }
+  },
+  rootUrl: process.env.ROOT_URL || 'https://1wallet.crazy.one'
 })
 
 export default config
