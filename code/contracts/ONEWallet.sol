@@ -6,6 +6,7 @@ import "./DomainManager.sol";
 import "./WalletGraph.sol";
 import "./Enums.sol";
 import "./IONEWallet.sol";
+import "./RandomNumberConsumer.sol";
 
 contract ONEWallet is TokenManager, IONEWallet {
     using TokenTracker for TokenTrackerState;

@@ -21,6 +21,7 @@ import {
   Timeline,
   Checkbox,
   Tooltip,
+  Input,
   Form
 } from 'antd'
 import CountryPhoneInput, {ConfigProvider} from 'antd-country-phone-input'
@@ -73,8 +74,10 @@ const sectionViews = {
 const Create = () => {
 
   const [userPhone, setUserPhone] = useState()
+  const [smsSent,setSmsSent] = useState()
   const [appleWatchOtpRegistered,setAppleWatchOtpRegistered] = useState()
   const [appleWatchDeviceId,setAppleWatchDeviceId] = useState()
+  const [deviceRegistered ,setDeviceRegistered] = useState()
 
   const generateNewOtpName = () => genName(Object.keys(wallets).map(k => wallets[k].name))
 
@@ -283,20 +286,40 @@ const Create = () => {
   }, [])
 
   //Additional auth device functions
-  const onFinish = (values) => {
+  const onSendSMSFinish = (values) => {
     setAppleWatchOtpRegistered(true)
+    setSmsSent(true)
     let phoneNumber = values['reg'].code + '' + values['reg'].phone
+    phoneNumber = phoneNumber.replace(/\D/g,'');
+    setUserPhone(phoneNumber)
     //Make API call to server
-    const registerUrl = config.appleWatchOtpService.registerDevice.replace('{{number}}',phoneNumber)
+    const registerUrl = config.appleWatchOtpService.registerDevice.replace('{{number}}',phoneNumber)+'&f=r'
     axios.get(registerUrl).then((status)=>{
-      console.log(status)
-      setAppleWatchDeviceId(status['device_id']);
+      setAppleWatchOtpRegistered(true)
     })
     //Get device id, store in wallet meta data
 
-    message.info(`onFinish: ${values && JSON.stringify(values)}`);
-    message.info('onFinish: '+registerUrl);
-    setAppleWatchOtpRegistered()
+    //message.info(`onFinish: ${values && JSON.stringify(values)}`);
+    //message.info('onFinish: '+registerUrl);
+    //setAppleWatchOtpRegistered()
+  };
+  //Additional auth device functions
+  const onValidCodeFinish = (values) => {
+    setAppleWatchOtpRegistered(true)
+    let smsCode = values.sms
+    let phoneNumber= userPhone
+    //Make API call to server
+    const registerUrl = config.appleWatchOtpService.registerDevice.replace('{{number}}',phoneNumber)+'&c='+smsCode+'&f=v'
+    axios.get(registerUrl).then((status)=>{
+      setAppleWatchDeviceId(status['device_id']);
+      setSmsSent(false)
+      setDeviceRegistered(true)
+    })
+    //Get device id, store in wallet meta data
+
+    //message.info(`onFinish: ${values && JSON.stringify(values)}`);
+    //message.info('onFinish: '+registerUrl);
+    //setAppleWatchOtpRegistered()
   };
   const onFinishFailed = (errorInfo) => {
     message.info(`onFinishFailed: ${errorInfo && JSON.stringify(errorInfo)}`);
@@ -376,7 +399,7 @@ const Create = () => {
                 <Space>
                   <ConfigProvider locale={en}>
                     <Form
-                      onFinish={onFinish}
+                      onFinish={onSendSMSFinish}
                       onFinishFailed={onFinishFailed}
                       initialValues={{
                         reg:{ short:'ca',code:1,phone:''}
@@ -386,10 +409,30 @@ const Create = () => {
                           <CountryPhoneInput/>
                         </Form.Item>
                         <Button type="primary" htmlType="submit">
-                          Register Device
+                          Send SMS code
                         </Button>
                       </Form>
                   </ConfigProvider>
+                </Space>
+              }
+              {appleWatchOtp && smsSent &&
+                <Space>
+                    <Form
+                      onFinish={onValidCodeFinish}
+                      onFinishFailed={onFinishFailed}
+                      >
+                        <Form.Item name="sms">
+                          <Input id="smsCode" placeholder="Enter SMS code" />
+                        </Form.Item>
+                        <Button type="primary" htmlType="submit">
+                          Register Device
+                        </Button>
+                      </Form>
+                </Space>
+              }
+              {appleWatchOtp && deviceRegistered &&
+                <Space>
+                  ✅ Phone and Apple Device ready to link to this wallet.
                 </Space>
               }
           </Space>
