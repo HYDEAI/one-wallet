@@ -10,6 +10,7 @@ import { SearchOutlined, LockOutlined, CloseOutlined, SettingOutlined } from '@a
 import config from '../config'
 import util, { useWindowDimensions } from '../util'
 import { Hint } from '../components/Text'
+import WalletAddress from './WalletAddress'
 // import Paths from '../constants/paths'
 const { Text, Link } = Typography
 
@@ -89,17 +90,15 @@ const WalletHeader = () => {
   const history = useHistory()
   const match = useRouteMatch('/:action/:address?')
   const { action, address: routeAddress } = match ? match.params : {}
-  const oneAddress = routeAddress && util.safeOneAddress(routeAddress) || ''
   const address = routeAddress && util.safeNormalizedAddress(routeAddress) || ''
-  const shortAddress = util.ellipsisAddress(oneAddress)
   const wallets = useSelector(state => state.wallet.wallets)
   const wallet = wallets[address] || {}
-  const subtitle = wallet.name ? `${wallet.name} (${shortAddress})` : shortAddress
+  const subtitle = address && <>{wallet.name && <Hint style={{ marginRight: 32 }}>{wallet.name}</Hint>}<WalletAddress address={address} shorten={false} alwaysShowOptions /></>
   const [settingsVisible, setSettingsVisible] = useState(false)
   const [relayerEditVisible, setRelayerEditVisible] = useState(false)
   return (
     <PageHeader
-      style={{ background: '#ffffff' }}
+      style={{ background: '#ffffff', padding: isMobile ? 8 : undefined }}
       onBack={action && (() => history.goBack())}
       title={!isMobile && titleCase(action || '')}
       subTitle={!isMobile && <Hint>{subtitle}</Hint>}

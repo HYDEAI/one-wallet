@@ -6,7 +6,7 @@ import util from '../util'
 
 const { Text, Title, Link } = Typography
 
-export const Heading = styled(Title).attrs(() => ({ level: 2 }))`
+export const Heading = styled(Title).attrs((props) => ({ level: 2, ...props }))`
   //font-size: 24px;
   //color: #1f1f1f;
 `
@@ -36,14 +36,30 @@ export const AutoResizeInputBox = ({ extraWidth = 0, value, style, onChange, ...
   return <InputBox width={(width + extraWidth) || 'auto'} ref={ref} style={style} value={value} onChange={onChange} {...args} />
 }
 
-export const Warning = ({ children, style, ...props }) =>
-  <Card style={{ borderRadius: 8, backgroundColor: '#f3cbcb', fontSize: 16, ...style }} bodyStyle={{ padding: 16, paddingLeft: 24, paddingRight: 24 }}>
+export const Warning = ({ children, info, style, ...props }) =>
+  <Card style={{ borderRadius: 8, backgroundColor: info ? '#fffbe6' : '#f3cbcb', fontSize: 16, ...style }} bodyStyle={{ padding: 16, paddingLeft: 24, paddingRight: 24 }}>
     <Text>{children}</Text>
   </Card>
 
-export const Label = styled.div`
+export const NormalLabel = styled.div`
   width: 64px;
 `
+export const WideLabel = styled.div`
+  width: 96px;
+`
+export const UltraWideLabel = styled.div`
+  width: 128px;
+`
+
+export const Label = ({ ultraWide, wide, children, ...props }) => {
+  if (ultraWide) {
+    return <UltraWideLabel {...props}>{children}</UltraWideLabel>
+  }
+  if (wide) {
+    return <WideLabel {...props}>{children}</WideLabel>
+  }
+  return <NormalLabel {...props}>{children}</NormalLabel>
+}
 
 export const ExplorerLink = styled(Link).attrs(e => ({ ...e, style: { color: '#888888' }, target: '_blank', rel: 'noopener noreferrer' }))`
   ${props => props['data-show-on-hover'] && 'opacity: 0.1;'}
@@ -51,3 +67,11 @@ export const ExplorerLink = styled(Link).attrs(e => ({ ...e, style: { color: '#8
     opacity: ${props => props['data-show-on-hover'] ? 1.0 : 0.8};
   }
 `
+
+export const Ul = styled.ul`
+  list-style: none!important;
+  margin-left: 0;
+  padding-left: 1em;
+  text-indent: -1em;
+`
+export const Li = styled.li``

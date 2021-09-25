@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useHistory } from 'react-router'
 import { Heading, Hint } from '../components/Text'
 import AnimatedSection from '../components/AnimatedSection'
-import { Space, Steps, Row, Select, message, Progress, Timeline } from 'antd'
-import QrReader from 'react-qr-reader'
+import { Space, Steps, message, Progress, Timeline } from 'antd'
 import { MigrationPayload } from '../proto/oauthMigration'
 import api from '../api'
 import ONEUtil from '../../../lib/util'
@@ -16,6 +15,7 @@ import { handleAddressError } from '../handler'
 import Paths from '../constants/paths'
 import * as Sentry from '@sentry/browser'
 import AddressInput from '../components/AddressInput'
+import QrCodeScanner from '../components/QrCodeScanner'
 
 const { Step } = Steps
 
@@ -25,46 +25,19 @@ const Restore = () => {
   const network = useSelector(state => state.wallet.network)
   const wallets = useSelector(state => state.wallet.wallets)
   const dispatch = useDispatch()
-  const [videoDevices, setVideoDevices] = useState([])
   const [secret, setSecret] = useState()
   const [secret2, setSecret2] = useState()
   const [name, setName] = useState()
-  const [device, setDevice] = useState()
   const [majorVersion, setMajorVersion] = useState()
   const [minorVersion, setMinorVersion] = useState()
-  const ref = useRef()
-  useEffect(() => {
-    const numAttempts = 0
-    const f = async () => {
-      const d = await navigator.mediaDevices.enumerateDevices()
-      const cams = d.filter(e => e.kind === 'videoinput')
-      if (cams.length <= 0) {
-        return message.error('Restore requires a camera to scan the QR code. Please use a device that has a camera.', 15)
-      }
-      if (cams.length === 1 && !cams[0].label && numAttempts < 5) {
-        setTimeout(() => f(), 2500)
-        console.log('got empty labels. retrying in 2.5s')
-      }
-      // console.log(cams)
-      setVideoDevices(cams)
-      setDevice(cams[0])
-    }
-    section === 2 && videoDevices.length === 0 && f()
-  }, [section])
-  const onChange = (v) => {
-    const d = videoDevices.find(e => e.deviceId === v)
-    setDevice(d)
-  }
-  useEffect(() => {
-    if (device && section === 2) {
-      ref.current.initiate()
-    }
-  }, [device])
+
   const onScan = (e) => {
     if (e && !secret) {
       try {
         const data = new URL(e).searchParams.get('data')
-        const params = MigrationPayload.decode(Buffer.from(data, 'base64')).otpParameters
+        const decoded = MigrationPayload.decode(Buffer.from(data, 'base64'))
+        // console.log(decoded)
+        const params = decoded.otpParameters
         const filteredParams = params.filter(e => e.issuer === 'ONE Wallet' || e.issuer === 'Harmony')
         if (filteredParams.length > 2) {
           message.error('You selected more than one authenticator entry to export. Please reselect on Google Authenticator')
@@ -89,10 +62,7 @@ const Restore = () => {
       }
     }
   }
-  const onError = (err) => {
-    console.error(err)
-    message.error(`Failed to parse QR code. Error: ${err}`)
-  }
+
   const [addressInput, setAddressInput] = useState({ value: '', label: '' })
   const [address, setAddress] = useState()
   const [root, setRoot] = useState()
@@ -100,12 +70,13 @@ const Restore = () => {
   const [duration, setDuration] = useState()
   const [slotSize, setSlotSize] = useState()
   const [lastResortAddress, setLastResortAddress] = useState()
-  const [dailyLimit, setDailyLimit] = useState()
+  const [spendingLimit, setSpendingLimit] = useState()
+  const [spendingInterval, setSpendingInterval] = useState()
 
   const [progress, setProgress] = useState(0)
   const [progressStage, setProgressStage] = useState(0)
 
-  const onRestore = async () => {
+  const onRestore = async (ignoreDoubleOtp) => {
     if (!root) {
       console.error('Root is not set. Abort.')
       return
@@ -123,22 +94,44 @@ const Restore = () => {
           const { hseed, root: computedRoot, layers, doubleOtp } = result
           if (!ONEUtil.bytesEqual(ONEUtil.hexToBytes(root), computedRoot)) {
             console.error('Roots are not equal', root, ONEUtil.hexString(computedRoot))
+            // console.error('Roots are not equal', root, ONEUtil.hexString(computedRoot), {
+            //   hseed,
+            //   doubleOtp,
+            //   secret,
+            //   secret2,
+            //   ignoreDoubleOtp,
+            //   ...securityParameters,
+            //   majorVersion,
+            //   minorVersion,
+            //   effectiveTime,
+            //   duration,
+            //   slotSize,
+            // })
+            if (!ignoreDoubleOtp && doubleOtp) {
+              message.error('Verification failed. Retrying using single authenticator code...')
+              onRestore(true)
+              return
+            }
             message.error('Verification failed. Your authenticator QR code might correspond to a different contract address.')
             return
           }
           storage.setItem(root, layers)
           const wallet = {
+            _merge: true,
             name,
             address,
             root,
             duration,
             effectiveTime,
             lastResortAddress,
-            dailyLimit,
             hseed: ONEUtil.hexView(hseed),
+            majorVersion,
+            minorVersion,
             doubleOtp,
             network,
-            ...securityParameters
+            ...securityParameters,
+            spendingLimit,
+            spendingInterval
           }
           dispatch(walletActions.updateWallet(wallet))
           dispatch(walletActions.fetchBalance({ address }))
@@ -150,7 +143,7 @@ const Restore = () => {
       console.log('[Restore] Posting to worker')
       worker && worker.postMessage({
         seed: secret,
-        seed2: secret2,
+        seed2: !ignoreDoubleOtp && secret2,
         effectiveTime,
         duration,
         slotSize,
@@ -184,9 +177,10 @@ const Restore = () => {
           duration,
           slotSize,
           lastResortAddress,
-          dailyLimit,
           majorVersion,
-          minorVersion
+          minorVersion,
+          spendingLimit,
+          spendingInterval
         } = await api.blockchain.getWallet({ address })
         console.log('Retrieved wallet:', {
           root,
@@ -194,7 +188,10 @@ const Restore = () => {
           duration,
           slotSize,
           lastResortAddress,
-          dailyLimit
+          majorVersion,
+          minorVersion,
+          spendingLimit,
+          spendingInterval
         })
         setAddress(address)
         setRoot(root)
@@ -202,7 +199,8 @@ const Restore = () => {
         setDuration(duration)
         setSlotSize(slotSize)
         setLastResortAddress(lastResortAddress)
-        setDailyLimit(dailyLimit)
+        setSpendingLimit(spendingLimit)
+        setSpendingInterval(spendingInterval)
         setSection(2)
         setMajorVersion(majorVersion)
         setMinorVersion(minorVersion)
@@ -224,6 +222,7 @@ const Restore = () => {
     }
     f()
   }, [addressInput])
+
   useEffect(() => {
     if (secret && name) {
       onRestore()
@@ -252,27 +251,7 @@ const Restore = () => {
                 <Step title='Select Your Wallet' description='Make sure your wallet is selected. Unselect other accounts.' />
                 <Step title='Scan the QR code' description='Scan the exported QR code on your Google Authenticator app' />
               </Steps>
-              <Row justify='end'>
-                <Select style={{ }} bordered={false} value={device && device.label} onChange={onChange}>
-                  {videoDevices.map(d => {
-                    return <Select.Option key={d.label} value={d.deviceId}>{d.label} </Select.Option>
-                  })}
-                </Select>
-              </Row>
-              {videoDevices && device &&
-                <QrReader
-                  ref={ref}
-                  deviceIdChooser={(_, devices) => {
-                    if (device) {
-                      return devices.filter(d => d.deviceId === device.deviceId)[0].deviceId
-                    }
-                    return devices[0].deviceId
-                  }}
-                  delay={300}
-                  onError={onError}
-                  onScan={onScan}
-                  style={{ width: '100%' }}
-                />}
+              <QrCodeScanner shouldInit={section === 2} onScan={onScan} />
             </>}
           {secret &&
             <>

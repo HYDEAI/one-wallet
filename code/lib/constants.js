@@ -29,6 +29,9 @@ module.exports = {
     TRANSFER_DOMAIN: 16,
     RECLAIM_REVERSE_DOMAIN: 17,
     RECLAIM_DOMAIN_FROM_BACKLINK: 18,
+    SIGN: 19,
+    REVOKE: 20,
+    CALL: 21,
 
     0: 'TRACK',
     1: 'UNTRACK',
@@ -49,12 +52,16 @@ module.exports = {
     16: 'TRANSFER_DOMAIN',
     17: 'RECLAIM_REVERSE_DOMAIN',
     18: 'RECLAIM_DOMAIN_FROM_BACKLINK',
+    19: 'SIGN',
+    20: 'REVOKE',
+    21: 'CALL'
   },
   EmptyAddress: '0x0000000000000000000000000000000000000000',
   EmptyBech32Address: 'one1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqquzw7vz',
   TreasuryAddress: '0x02F2cF45DD4bAcbA091D78502Dba3B2F431a54D3',
-  MajorVersion: 9,
-  MinorVersion: 1,
+  MajorVersion: 12,
+  MinorVersion: 3,
+  DefaultSpendingInterval: 86400, // 3600 * 24
   Domain: {
     DEFAULT_RENT_DURATION: 31536000, // 365 * 24 * 3600,
     DEFAULT_TLD: 'one',
@@ -68,5 +75,10 @@ module.exports = {
   },
   NullProof: {
     address: '0x0000000000000000000000000000000000000000', neighbors: [], index: 0, eotp: '0x0000000000000000000000000000000000000000000000000000000000000000',
-  }
+  },
+  Sushi: {
+    ROUTER: '0x1b02da8cb0d097eb8d57a175b88c7d8b47997506',
+    FACTORY: '0xc35DADB65012eC5796536bD9864eD8773aBc74C4',
+    WONE: '0xcF664087a5bB0237a0BAd6742852ec6c8d69A27a',
+  },
 }

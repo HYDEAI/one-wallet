@@ -14,10 +14,16 @@ const IERC1155MetadataURI = require('../../build/contracts/IERC1155MetadataURI.j
 const Resolver = require('../../build/contracts/Resolver.json')
 const ReverseResolver = require('../../build/contracts/IDefaultReverseResolver.json')
 const Registrar = require('../../build/contracts/IRegistrar.json')
+// abi only - load with web3 or ethers
+const SushiRouter = require('../../external/IUniswapV2Router02.json')
+const SushiFactory = require('../../external/IUniswapV2Factory.json')
+const SushiToken = require('../../external/IERC20Uniswap.json')
+const SushiPair = require('../../external/IUniswapV2Pair.json')
 
 const BN = require('bn.js')
 const ONEUtil = require('../util')
 const ONEConstants = require('../constants')
+const { HarmonyONE } = require('../../client/src/components/TokenAssets')
 
 const apiConfig = {
   relayer: config.defaults.relayer,
@@ -63,7 +69,7 @@ const initAPI = (store) => {
   })
 }
 
-// TODO: cleanup this mess
+// TODO: cleanup this mess after switching to w3
 const providers = {}; const contractWithProvider = {}; const networks = []; const web3instances = {}
 let activeNetwork = config.defaults.network
 let web3; let one
@@ -156,6 +162,10 @@ const api = {
     get: async ({ link }) => {
       const { data } = await axios.get(link)
       return data
+    },
+    head: async ({ link }) => {
+      const { headers } = await axios.head(link)
+      return headers
     }
   },
   binance: {
@@ -177,6 +187,26 @@ const api = {
     }
   },
   blockchain: {
+    getLastOperationTime: async ({ address }) => {
+      const c = await one.at(address)
+      const t = await c.lastOperationTime() // BN but convertible to uint32
+      return t.toNumber()
+    },
+    getNonce: async ({ address }) => {
+      const c = await one.at(address)
+      const nonce = await c.getNonce()
+      return nonce.toNumber()
+    },
+    getSpending: async ({ address }) => {
+      const c = await one.at(address)
+      let spendingLimit, spendingAmount, lastSpendingInterval, spendingInterval
+      const r = await c.getCurrentSpendingState()
+      spendingLimit = new BN(r[0])
+      spendingAmount = new BN(r[1])
+      lastSpendingInterval = new BN(r[2])
+      spendingInterval = new BN(r[3])
+      return { spendingLimit, spendingAmount, lastSpendingInterval, spendingInterval }
+    },
     /**
      * Require contract >= v2
      * @param address
@@ -196,6 +226,21 @@ const api = {
         if (config.debug) console.log(`Failed to get wallet version. Wallet might be too old. Error: ${ex.toString()}`)
       }
       const [root, height, interval, t0, lifespan, maxOperationsPerInterval, lastResortAddress, dailyLimit] = Object.keys(result).map(k => result[k])
+      let spendingLimit, spendingAmount, lastSpendingInterval, spendingInterval
+      if (majorVersion >= 12) {
+        const r = await c.getCurrentSpendingState()
+        spendingLimit = r[0]
+        spendingAmount = r[1]
+        lastSpendingInterval = r[2]
+        spendingInterval = r[3]
+      } else {
+        const r = await c.getCurrentSpending()
+        spendingAmount = r[0]
+        lastSpendingInterval = r[1]
+        spendingLimit = dailyLimit
+        spendingInterval = new BN(ONEConstants.DefaultSpendingInterval) // default value for pre-v12 wallets i.e. dailyLimit
+      }
+
       if (raw) {
         return {
           root,
@@ -208,6 +253,10 @@ const api = {
           dailyLimit: dailyLimit.toString(10),
           majorVersion: majorVersion ? majorVersion.toNumber() : 0,
           minorVersion: minorVersion ? minorVersion.toNumber() : 0,
+          spendingAmount,
+          lastSpendingInterval,
+          spendingLimit,
+          spendingInterval
         }
       }
       const intervalMs = interval.toNumber() * 1000
@@ -219,9 +268,12 @@ const api = {
         duration: lifespan.toNumber() * intervalMs,
         slotSize: maxOperationsPerInterval.toNumber(),
         lastResortAddress,
-        dailyLimit: dailyLimit.toString(10),
         majorVersion: majorVersion ? majorVersion.toNumber() : 0,
         minorVersion: minorVersion ? minorVersion.toNumber() : 0,
+        spendingLimit: spendingLimit.toString(),
+        lastSpendingInterval: lastSpendingInterval.toNumber(),
+        spendingAmount: spendingAmount.toString(),
+        spendingInterval: spendingInterval.toNumber() * 1000
       }
     },
     getBalance: async ({ address }) => {
@@ -290,7 +342,7 @@ const api = {
         tt.push({
           tokenType: tokenTypes[i].toNumber(),
           contractAddress: contracts[i],
-          tokenId: tokenIds[i].toNumber()
+          tokenId: tokenIds[i].toString()
         })
       }
       return tt
@@ -403,12 +455,59 @@ const api = {
         const ret = await c.query(label, name)
         return !!ret[0]
       }
+    },
+  },
 
+  sushi: {
+    getCachedTokenPairs: async () => {
+      const { data } = await base.get('/sushi')
+      const { pairs, tokens } = data || {}
+      return { pairs, tokens }
+    },
+    getAmountOut: async ({ amountIn, tokenAddress, inverse }) => {
+      const c = new web3.eth.Contract(SushiRouter, ONEConstants.Sushi.ROUTER)
+      const path = inverse ? [tokenAddress, ONEConstants.Sushi.WONE] : [ONEConstants.Sushi.WONE, tokenAddress]
+      const amountsOut = await c.methods.getAmountsOut(amountIn, path).call()
+      return amountsOut[1]
+    },
+    getAmountIn: async ({ amountOut, tokenAddress, inverse }) => {
+      const c = new web3.eth.Contract(SushiRouter, ONEConstants.Sushi.ROUTER)
+      const path = inverse ? [ONEConstants.Sushi.WONE, tokenAddress] : [tokenAddress, ONEConstants.Sushi.WONE]
+      const amountsIn = await c.methods.getAmountsIn(amountOut, path).call()
+      return amountsIn[0]
+    },
+    getTokenInfo: async ({ tokenAddress }) => {
+      const t = new web3.eth.Contract(SushiToken, tokenAddress)
+      const [symbol, name, decimal, supply] = await Promise.all([t.methods.symbol().call(), t.methods.name().call(), t.methods.decimals().call(), t.methods.totalSupply().call()])
+      return {
+        symbol, name, decimal, supply, address: tokenAddress
+      }
+    },
+    getPair: async ({ t0, t1 }) => {
+      const factory = new web3.eth.Contract(SushiFactory, ONEConstants.Sushi.FACTORY)
+      const pair = await factory.methods.getPair(t0, t1).call()
+      return pair
+    },
+    getReserves: async ({ pairAddress }) => {
+      const t = new web3.eth.Contract(SushiPair, pairAddress)
+      const r = await t.methods.getReserves().call()
+      const [reserve0, reserve1, time] = [r[0], r[1], r[2]]
+      return { reserve0, reserve1, time }
+    },
+    getTokenIcon: async ({ symbol }) => {
+      return `https://res.cloudinary.com/sushi-cdn/image/fetch/w_64/https://raw.githubusercontent.com/sushiswap/icons/master/token/${symbol.toLowerCase()}.jpg`
+    },
+    getAllowance: async ({ address, contractAddress }) => {
+      const t = new web3.eth.Contract(SushiToken, contractAddress)
+      const r = await t.methods.allowance(address, ONEConstants.Sushi.ROUTER).call()
+      // returns a BN
+      return new BN(r)
     }
   },
+
   relayer: {
-    create: async ({ root, height, interval, t0, lifespan, slotSize, lastResortAddress, dailyLimit, backlinks = [] }) => {
-      const { data } = await base.post('/new', { root, height, interval, t0, lifespan, slotSize, lastResortAddress, dailyLimit, backlinks })
+    create: async ({ root, height, interval, t0, lifespan, slotSize, lastResortAddress, spendingLimit, spendingInterval, backlinks = [] }) => {
+      const { data } = await base.post('/new', { root, height, interval, t0, lifespan, slotSize, lastResortAddress, spendingLimit, spendingInterval, backlinks })
       return data
     },
     commit: async ({ address, hash, paramsHash, verificationHash }) => {
@@ -542,6 +641,9 @@ const api = {
     },
 
     reveal: async ({ address, neighbors, index, eotp, operationType, tokenType, contractAddress, tokenId, dest, amount, data = '0x' }) => {
+      if (data.constructor === Uint8Array) {
+        data = ONEUtil.hexString(data)
+      }
       const { data: ret } = await base.post('/reveal', { address, neighbors, index, eotp, operationType, tokenType, contractAddress, tokenId, dest, amount, data })
       return ret
     },
@@ -554,6 +656,28 @@ const api = {
       return data === 'OK'
     }
   },
+
+  // utilities around tokens
+  tokens: {
+    batchGetMetadata: async (tokens) => {
+      return Promise.all(tokens.map(async (t) => {
+        try {
+          if (t.symbol === HarmonyONE.symbol) {
+            return t
+          }
+          const { name, symbol, decimals } = await api.blockchain.getTokenMetadata(t)
+          return {
+            ...t,
+            name,
+            symbol,
+            decimals
+          }
+        } catch (ex) {
+          console.error(ex)
+        }
+      }))
+    }
+  }
 }
 
 if (window) {

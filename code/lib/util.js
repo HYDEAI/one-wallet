@@ -9,6 +9,7 @@ const securityParams = require('./params')
 const STANDARD_DECIMAL = 18
 const PERMIT_DEPRECATED_METHOD = process.env.PERMIT_DEPRECATED_METHOD
 const uts46 = require('idna-uts46')
+const abi = require('web3-eth-abi')
 
 const utils = {
   hexView: (bytes) => {
@@ -173,6 +174,9 @@ const utils = {
   getVersion: ({ majorVersion, minorVersion }) => `${majorVersion}.${minorVersion}`,
 
   securityParameters: ({ majorVersion, minorVersion }) => {
+    if (majorVersion <= 7) {
+      return { randomness: 0, hasher: 'sha256' }
+    }
     const keys = Object.keys(securityParams)
     const v = utils.getVersion({ majorVersion, minorVersion })
     for (let k of keys) {
@@ -209,5 +213,54 @@ const utils = {
     }
     return hash
   },
+
+  abi,
+
+  // WARNING: returns string-encoded bytes (0x....), unlike other functions provided in this package
+  encodeCalldata: (method, values = []) => {
+    if (!method) {
+      return '0x'
+    }
+    const selector = abi.encodeFunctionSignature(method)
+    const m = method.match(/.+\((.*)\)/)
+    if (!m) {
+      return null
+    }
+    const params = m[1] ? m[1].split(',') : []
+    const encodedParameters = abi.encodeParameters(params, values)
+    return selector + encodedParameters.slice(2)
+  },
+
+  // WARNING: returns string-encoded bytes (0x....), unlike other functions provided in this package
+  encodeMultiCall: (calls) => {
+    const dests = []
+    const amounts = []
+    const encoded = []
+    for (let i = 0; i < calls.length; i++) {
+      const { amount, dest, method, values } = calls[i]
+      amounts.push(amount || 0)
+      dests.push(dest)
+      encoded.push(utils.encodeCalldata(method, values))
+    }
+    return abi.encodeParameters(['address[]', 'uint256[]', 'bytes[]'], [dests, amounts, encoded])
+  },
+
+  bytesConcat: (...args) => {
+    let len = 0
+    args.forEach(e => {
+      len += e.length
+    })
+    const buf = new Uint8Array(len)
+    let n = 0
+    args.forEach(e => {
+      buf.set(e, n)
+      n += e.length
+    })
+    return buf
+  },
+
+  ethMessage: (message) => {
+    return '\x19Ethereum Signed Message:\n' + message.length.toString() + message
+  }
 }
 module.exports = utils

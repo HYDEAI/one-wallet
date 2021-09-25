@@ -10,9 +10,11 @@ import CreatePage from './pages/Create'
 import ListPage from './pages/List'
 import RestorePage from './pages/Restore'
 import ShowPage from './pages/Show'
+import WalletAuth from './integration/WalletAuth'
 import { walletActions } from './state/modules/wallet'
 import config from './config'
 import util, { useWindowDimensions } from './util'
+import Unwrap from './pages/Unwrap'
 
 const LocalRoutes = () => {
   const dispatch = useDispatch()
@@ -22,11 +24,23 @@ const LocalRoutes = () => {
   const networkWallets = util.filterNetworkWallets(wallets, network)
   const { isMobile } = useWindowDimensions()
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{
+      minHeight: '100vh'
+    }}
+    >
       <SiderMenu />
       <Layout>
         <WalletHeader />
-        <Layout.Content style={{ padding: isMobile ? 16 : 32 }}>
+        <Layout.Content
+          style={
+            {
+              paddingBottom: isMobile ? 0 : 32,
+              paddingTop: isMobile ? 8 : 32,
+              paddingLeft: isMobile ? 0 : 32,
+              paddingRight: isMobile ? 0 : 32
+            }
+          }
+        >
           <Switch>
             <Route
               path={Paths.dev} render={() => {
@@ -34,10 +48,14 @@ const LocalRoutes = () => {
                 return <Redirect to={Paths.root} />
               }}
             />
+            <Route path={Paths.auth} component={WalletAuth} />
             <Route path={Paths.create} component={CreatePage} />
+            <Route path={Paths.create1} render={() => <CreatePage showRecovery />} />
+            <Route path={Paths.create2} render={() => <CreatePage expertMode showRecovery />} />
             <Route path={Paths.wallets} component={ListPage} />
             <Route path={Paths.restore} component={RestorePage} />
             <Route path={Paths.show} component={ShowPage} />
+            <Route path={Paths.unwrap} component={Unwrap} />
             <Route
               exact
               path={Paths.root}

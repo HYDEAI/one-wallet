@@ -4,6 +4,7 @@ const router = express.Router()
 const { StatusCodes } = require('http-status-codes')
 const blockchain = require('../blockchain')
 const ONEConstants = require('../../lib/constants')
+const SushiData = require('../../data/sushiswap.json')
 const BN = require('bn.js')
 const { generalLimiter, walletAddressLimiter, rootHashLimiter, globalLimiter } = require('./rl')
 const { parseTx, parseError, checkParams } = require('./util')
@@ -46,27 +47,32 @@ router.use((req, res, next) => {
 // TODO: rate limiting + fingerprinting + delay with backoff
 
 router.post('/new', rootHashLimiter({ max: 60 }), generalLimiter({ max: 10 }), globalLimiter({ max: 250 }), async (req, res) => {
-  let { root, height, interval, t0, lifespan, slotSize, lastResortAddress, dailyLimit, backlinks } = req.body
+  let { root, height, interval, t0, lifespan, slotSize, lastResortAddress, spendingLimit, backlinks, spendingInterval } = req.body
   // root is hex string, 32 bytes
   height = parseInt(height)
   interval = parseInt(interval)
   t0 = parseInt(t0)
   lifespan = parseInt(lifespan)
   slotSize = parseInt(slotSize)
+  spendingInterval = parseInt(spendingInterval)
   backlinks = backlinks || []
   lastResortAddress = lastResortAddress || config.nullAddress
   // lastResortAddress is hex string, 20 bytes
   // dailyLimit is a BN in string form
   if (config.debug || config.verbose) {
-    console.log(`[/new] `, { root, height, interval, t0, lifespan, slotSize, lastResortAddress, dailyLimit, backlinks })
+    console.log(`[/new] `, { core: { root, height, interval, t0, lifespan, slotSize }, spending: { spendingLimit, spendingInterval }, lastResortAddress, backlinks })
   }
-  if (!checkParams({ root, height, interval, t0, lifespan, slotSize, lastResortAddress, dailyLimit, backlinks }, res)) {
+  if (!checkParams({ root, height, interval, t0, lifespan, slotSize, lastResortAddress, spendingLimit, spendingInterval, backlinks }, res)) {
     return
+  }
+  if (spendingLimit === 0) {
+    // since we renamed dailyLimit to spendingLimit we must make sure client is not using the old name / format
+    return res.status(StatusCodes.BAD_REQUEST).json({ error: 'spendingLimit cannot be 0' })
   }
 
   // TODO parameter verification
   try {
-    const wallet = await blockchain.getContract(req.network).new(root, height, interval, t0, lifespan, slotSize, lastResortAddress, new BN(dailyLimit, 10), backlinks)
+    const wallet = await blockchain.getContract(req.network).new([root, height, interval, t0, lifespan, slotSize], [new BN(spendingLimit, 10), 0, 0, new BN(spendingInterval, 10) ], lastResortAddress, backlinks)
     return res.json({ success: true, address: wallet.address })
   } catch (ex) {
     console.error(ex)
@@ -75,7 +81,7 @@ router.post('/new', rootHashLimiter({ max: 60 }), generalLimiter({ max: 10 }), g
   }
 })
 
-router.post('/commit', generalLimiter({ max: 60 }), walletAddressLimiter({ max: 60 }), async (req, res) => {
+router.post('/commit', generalLimiter({ max: 240 }), walletAddressLimiter({ max: 240 }), async (req, res) => {
   let { hash, paramsHash, verificationHash, address } = req.body
   if (config.debug || config.verbose) {
     console.log(`[/commit] `, { hash, paramsHash, verificationHash, address })
@@ -114,7 +120,7 @@ router.post('/commit', generalLimiter({ max: 60 }), walletAddressLimiter({ max: 
   }
 })
 
-router.post('/reveal', generalLimiter({ max: 120 }), walletAddressLimiter({ max: 120 }), async (req, res) => {
+router.post('/reveal', generalLimiter({ max: 240 }), walletAddressLimiter({ max: 240 }), async (req, res) => {
   let { neighbors, index, eotp, address, operationType, tokenType, contractAddress, tokenId, dest, amount, data } = req.body
   if (!checkParams({ neighbors, index, eotp, address, operationType, tokenType, contractAddress, tokenId, dest, amount, data }, res)) {
     return
@@ -151,7 +157,7 @@ router.post('/reveal', generalLimiter({ max: 120 }), walletAddressLimiter({ max:
 })
 
 // TODO: deprecate in the next version
-router.post('/reveal/transfer', generalLimiter({ max: 30 }), walletAddressLimiter({ max: 30 }), async (req, res) => {
+router.post('/reveal/transfer', generalLimiter({ max: 120 }), walletAddressLimiter({ max: 120 }), async (req, res) => {
   let { neighbors, index, eotp, dest, amount, address } = req.body
   if (!checkParams({ neighbors, index, eotp, dest, amount, address }, res)) {
     return
@@ -160,7 +166,7 @@ router.post('/reveal/transfer', generalLimiter({ max: 30 }), walletAddressLimite
 })
 
 // TODO: deprecate in the next version
-router.post('/reveal/recovery', generalLimiter({ max: 30 }), walletAddressLimiter({ max: 30 }), async (req, res) => {
+router.post('/reveal/recovery', generalLimiter({ max: 120 }), walletAddressLimiter({ max: 120 }), async (req, res) => {
   let { neighbors, index, eotp, address } = req.body
   if (!checkParams({ neighbors, index, eotp, address }, res)) {
     return
@@ -169,7 +175,7 @@ router.post('/reveal/recovery', generalLimiter({ max: 30 }), walletAddressLimite
 })
 
 // TODO: deprecate in the next version
-router.post('/reveal/set-recovery-address', generalLimiter({ max: 30 }), walletAddressLimiter({ max: 30 }), async (req, res) => {
+router.post('/reveal/set-recovery-address', generalLimiter({ max: 120 }), walletAddressLimiter({ max: 120 }), async (req, res) => {
   let { neighbors, index, eotp, address, lastResortAddress } = req.body
   if (!checkParams({ neighbors, index, eotp, address, lastResortAddress }, res)) {
     return
@@ -178,7 +184,7 @@ router.post('/reveal/set-recovery-address', generalLimiter({ max: 30 }), walletA
 })
 
 // TODO: deprecate in the next version
-router.post('/reveal/token', generalLimiter({ max: 30 }), walletAddressLimiter({ max: 30 }), async (req, res) => {
+router.post('/reveal/token', generalLimiter({ max: 120 }), walletAddressLimiter({ max: 120 }), async (req, res) => {
   let { neighbors, index, eotp, address, operationType, tokenType, contractAddress, tokenId, dest, amount, data } = req.body
   if (!checkParams({ neighbors, index, eotp, address, operationType, tokenType, contractAddress, tokenId, dest, amount, data }, res)) {
     return
@@ -201,6 +207,10 @@ router.post('/retire', generalLimiter({ max: 6 }), walletAddressLimiter({ max: 6
     const { code, error, success } = parseError(ex)
     return res.status(code).json({ error, success })
   }
+})
+
+router.get('/sushi', generalLimiter({ max: 120 }), walletAddressLimiter({ max: 120 }), async (req, res) => {
+  res.json(SushiData)
 })
 
 module.exports = router

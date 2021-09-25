@@ -64,7 +64,7 @@ const reducer = handleActions(
 
     [walletActions.updateWallet]: (state, action) => ({
       ...state,
-      wallets: { ...state.wallets, [action.payload.address]: action.payload }
+      wallets: { ...state.wallets, [action.payload.address]: action.payload._merge ? omit({ ...state.wallets[action.payload.address], ...action.payload }, ['_merge']) : action.payload }
     }),
 
     [walletActions.selectWallet]: (state, action) => ({
@@ -184,6 +184,17 @@ const reducer = handleActions(
         [action.payload.address]: {
           ...state.wallets[action.payload.address],
           domain: action.payload.domain
+        }
+      }
+    }),
+
+    [walletActions.userAcknowledgedToSaveAddress]: (state, action) => ({
+      ...state,
+      wallets: {
+        ...state.wallets,
+        [action.payload.address]: {
+          ...state.wallets[action.payload.address],
+          acknowledgedToSaveAddress: true
         }
       }
     }),

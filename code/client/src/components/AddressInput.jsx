@@ -1,39 +1,51 @@
-import { CloseOutlined, SearchOutlined } from '@ant-design/icons'
-import { Select, Button, Tooltip, Row, Col, Spin, Typography } from 'antd'
-import React, { useCallback, useEffect, useState } from 'react'
+import { CloseOutlined, ScanOutlined } from '@ant-design/icons'
+import { Select, Button, Tooltip, Row, Col, Spin, Typography, Space, message } from 'antd'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import walletActions from '../state/modules/wallet/actions'
-import util, { useWaitExecution, useWindowDimensions } from '../util'
+import util, { useWaitExecution, useWindowDimensions, updateQRCodeState } from '../util'
 import WalletConstants from '../constants/wallet'
 import api from '../api'
 import { isEmpty, trim } from 'lodash'
 import ONEConstants from '../../../lib/constants'
+import QrCodeScanner from './QrCodeScanner'
 
 const { Text } = Typography
 
 const delayDomainOperationMillis = 1000
 
+const ScanButton = ({ isMobile, showQrCodeScanner, setShowQrCodeScanner }) => {
+  const inner = showQrCodeScanner
+    ? <CloseOutlined style={{ fontSize: '24px', marginTop: -8 }} onClick={() => setShowQrCodeScanner(false)} />
+    : <ScanOutlined style={{ fontSize: '24px', marginTop: -8 }} onClick={() => setShowQrCodeScanner(true)} />
+
+  if (!isMobile) {
+    return (
+      <Tooltip title='Scan address QR Code'>
+        {inner}
+      </Tooltip>
+    )
+  }
+  return inner
+}
+
 /**
  * Renders address input that provides type ahead search for any known addresses.
  * Known addresses are addresses that have been entered by user for at least once.
  */
-const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSelectOptions }) => {
+const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSelectOptions, disableManualInput, disabled, style, allowTemp }) => {
   const dispatch = useDispatch()
-
+  const state = useRef({ last: undefined, lastTime: Date.now() }).current
   const [searchingAddress, setSearchingAddress] = useState(false)
-
   const [searchValue, setSearchValue] = useState('')
-
-  const wallets = useSelector(state => Object.keys(state.wallet.wallets).map((k) => state.wallet.wallets[k]))
-
+  const [showQrCodeScanner, setShowQrCodeScanner] = useState('')
+  const walletsMap = useSelector(state => state.wallet.wallets)
+  const wallets = Object.keys(walletsMap).map((k) => walletsMap[k])
   const knownAddresses = useSelector(state =>
     state.wallet.knownAddresses || {}
   )
-
   const network = useSelector(state => state.wallet.network)
-
   const { isMobile } = useWindowDimensions()
-
   const deleteKnownAddress = useCallback((address) => {
     setAddressCallback({ value: '', label: '' })
     dispatch(walletActions.deleteKnownAddress(address))
@@ -42,6 +54,42 @@ const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSe
   const onSearchAddress = (value) => {
     setSearchingAddress(true)
     setSearchValue(value)
+  }
+
+  // Scanned value for address prefill will be ROOT_URL/to/{address}?d=xxx, we take address here for prefill.
+  const onScan = async (v) => {
+    setSearchingAddress(true)
+    if (!updateQRCodeState(v, state)) {
+      return
+    }
+
+    state.last = v
+    state.lastTime = Date.now()
+    const pattern = WalletConstants.qrcodePattern
+    const m = v.match(pattern)
+    if (!m) {
+      message.error('Unrecognizable code')
+      return
+    }
+    const maybeAddress = m[1]
+    const validAddress = util.safeNormalizedAddress(maybeAddress)
+    if (maybeAddress && validAddress) {
+      const oneAddress = util.safeOneAddress(validAddress)
+      const domainName = await api.blockchain.domain.reverseLookup({ address: validAddress })
+
+      onSelectAddress({
+        label: domainName || oneAddress,
+        value: validAddress
+      })
+
+      setShowQrCodeScanner(false)
+    }
+
+    if (maybeAddress && !validAddress) {
+      message.error('Address not found')
+      setShowQrCodeScanner(false)
+    }
+    setSearchingAddress(false)
   }
 
   useWaitExecution(
@@ -102,12 +150,14 @@ const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSe
 
       const walletsNotInKnownAddresses = wallets.filter((wallet) =>
         !existingKnownAddresses.find((knownAddress) =>
-          knownAddress.address === wallet.address && knownAddress.network === wallet.network)
+          knownAddress.address === wallet.address && knownAddress.network === wallet.network && (!wallet.temp || allowTemp))
       )
 
       const knownAddressesWithoutDomain = existingKnownAddresses.filter((knownAddress) =>
         !isEmpty(knownAddress.domain?.name)
       )
+
+      const unlabelledWalletAddress = wallets.filter(w => existingKnownAddresses.find(a => !a.label && !a.domain?.name && a.address === w.address && (!w.temp || allowTemp)))
 
       // Init the known address entries for existing wallets.
       walletsNotInKnownAddresses.forEach((wallet) => {
@@ -117,6 +167,13 @@ const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSe
           network: wallet.network,
           creationTime: wallet.effectiveTime,
           numUsed: 0
+        }))
+      })
+
+      unlabelledWalletAddress.forEach((w) => {
+        dispatch(walletActions.setKnownAddress({
+          ...knownAddresses[w],
+          label: w.name,
         }))
       })
 
@@ -146,7 +203,7 @@ const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSe
 
     if (validAddress) {
       const existingKnownAddress = knownAddresses[validAddress]
-
+      // console.log(addressObject)
       setAddressCallback(addressObject.label
         ? {
             ...addressObject,
@@ -176,7 +233,7 @@ const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSe
     }
   }, [knownAddresses, setAddressCallback])
 
-  const showSelectManualInputAddress = util.safeOneAddress(addressValue.value) &&
+  const showSelectManualInputAddress = !disableManualInput && util.safeOneAddress(addressValue.value) &&
     !wallets[util.safeNormalizedAddress(addressValue.value)] &&
     !Object.keys(knownAddresses).includes(util.safeNormalizedAddress(addressValue.value))
 
@@ -222,34 +279,39 @@ const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSe
     filterValue
   }) => {
     const oneAddress = util.safeOneAddress(address)
-    const longAddressLabel = label ? `(${label}) ${oneAddress}` : oneAddress
-    const shortenAddressLabel = label ? `(${label}) ${util.ellipsisAddress(oneAddress)}` : util.ellipsisAddress(oneAddress)
-    const displayText = util.shouldShortenAddress({ label: label, isMobile })
-      ? shortenAddressLabel
-      : longAddressLabel
-
+    const addressDisplay = util.shouldShortenAddress({ label, isMobile }) ? util.ellipsisAddress(oneAddress) : oneAddress
+    const displayLabel = `${label ? `(${label})` : ''} ${addressDisplay}`
     return (
-      <Select.Option key={displayText} value={filterValue} style={{ padding: 0 }}>
+      <Select.Option key={addressDisplay} value={filterValue} style={{ padding: 0 }}>
         <Row align='left'>
-          <Col span={!displayDeleteButton ? 24 : 21}>
+          <Col span={!displayDeleteButton ? 24 : 20}>
             <Tooltip title={oneAddress}>
               <Button
                 block
                 type='text'
-                style={{ textAlign: 'left', height: '50px' }}
+                style={{ textAlign: 'left', height: '100%', padding: '5px' }}
                 onClick={() => {
-                  onSelectAddress({ value: address, label: displayText, key, domainName })
+                  onSelectAddress({ value: address, label: displayLabel, key, domainName })
                 }}
               >
-                {displayText}
+                <Space direction={isMobile ? 'vertical' : 'horizontal'}>
+                  {label ? `(${label})` : ''}
+                  {addressDisplay}
+                </Space>
               </Button>
             </Tooltip>
           </Col>
-          <Col span={3}>
+          <Col span={4}>
             {
             displayDeleteButton
               ? (
-                <Button type='text' style={{ textAlign: 'left', height: '50px' }} onClick={() => deleteKnownAddress(address)}>
+                <Button
+                  type='text' style={{ textAlign: 'left', height: '50px' }} onClick={(e) => {
+                    deleteKnownAddress(address)
+                    e.stopPropagation()
+                    return false
+                  }}
+                >
                   <CloseOutlined />
                 </Button>
                 )
@@ -261,60 +323,78 @@ const AddressInput = ({ setAddressCallback, currentWallet, addressValue, extraSe
     )
   }
 
+  // Make sure there is no value set for Select input if no selection since we are using labelInValue, which a default value/label
+  // will cover the inner search input that will make the right-click to paste not available.
+  const selectInputValueProp = addressValue.value !== ''
+    ? {
+        value: addressValue
+      }
+    : {}
+
   return (
-    <Select
-      suffixIcon={<SearchOutlined />}
-      placeholder='one1......'
-      labelInValue
-      style={{
-        width: isMobile ? '100%' : 500,
-        borderBottom: '1px dashed black'
-      }}
-      notFoundContent={searchingAddress ? <Spin size='small' /> : <Text type='secondary'>No address found</Text>}
-      bordered={false}
-      showSearch
-      value={addressValue}
-      onBlur={onEnterSelect}
-      onInputKeyDown={onEnterSelect}
-      onSearch={onSearchAddress}
-    >
-      {
-        knownAddressesOptions
-          .filter((knownAddress) =>
-            knownAddress.network === network &&
-            notCurrentWallet(knownAddress.address) &&
-            knownAddress.address !== WalletConstants.oneWalletTreasury.address)
-          .sort((knownAddress) => knownAddress.label ? -1 : 0)
-          .map((knownAddress, index) => {
-            const oneAddress = util.safeOneAddress(knownAddress.address)
-            const addressLabel = knownAddress.label || knownAddress.domain?.name
+    <>
+      <Space direction='vertical' style={{ width: '100%' }}>
+        <Select
+          suffixIcon={<ScanButton isMobile={isMobile} setShowQrCodeScanner={setShowQrCodeScanner} showQrCodeScanner={showQrCodeScanner} />}
+          placeholder='one1......'
+          labelInValue
+          style={{
+            width: isMobile ? '100%' : 500,
+            borderBottom: '1px dashed black',
+            ...style
+          }}
+          notFoundContent={searchingAddress ? <Spin size='small' /> : <Text type='secondary'>No address found</Text>}
+          bordered={false}
+          showSearch
+          onBlur={onEnterSelect}
+          onInputKeyDown={onEnterSelect}
+          onSearch={onSearchAddress}
+          disabled={disabled}
+          {
+          ...selectInputValueProp
+        }
+        >
+          {
+          knownAddressesOptions
+            .filter((knownAddress) =>
+              knownAddress.network === network &&
+              notCurrentWallet(knownAddress.address) &&
+              (!walletsMap?.[knownAddress.address]?.temp || allowTemp) && // not a temporary wallet
+              knownAddress.address !== WalletConstants.oneWalletTreasury.address)
+            .sort((knownAddress) => knownAddress.label ? -1 : 0)
+            .map((knownAddress, index) => {
+              const oneAddress = util.safeOneAddress(knownAddress.address)
+              const addressLabel = knownAddress.label || knownAddress.domain?.name
 
-            // Only display actions for addresses that are not selected.
-            // User's wallets addresses are not deletable.
-            const displayDeleteButton = addressValue.value !== knownAddress.address && !walletsAddresses.includes(knownAddress.address)
+              // Only display actions for addresses that are not selected.
+              // User's wallets addresses are not deletable.
+              const displayDeleteButton = addressValue.value !== knownAddress.address && !walletsAddresses.includes(knownAddress.address)
 
-            return buildSelectOption({
-              key: index,
-              address: knownAddress.address,
-              displayDeleteButton,
-              label: addressLabel,
-              domainName: knownAddress.domain?.name,
-              filterValue: `${knownAddress.address} ${oneAddress} ${knownAddress.domain?.name}`
+              return buildSelectOption({
+                key: index,
+                address: knownAddress.address,
+                displayDeleteButton,
+                label: addressLabel,
+                domainName: knownAddress.domain?.name,
+                filterValue: `${knownAddress.address} ${oneAddress} ${knownAddress.domain?.name}`
+              })
             })
+        }
+          {
+          showSelectManualInputAddress && buildSelectOption({
+            address: addressValue.value,
+            label: addressValue.domainName,
+            domainName: addressValue.domainName,
+            filterValue: addressValue.filterValue
           })
-      }
-      {
-        showSelectManualInputAddress && buildSelectOption({
-          address: addressValue.value,
-          label: addressValue.domainName,
-          domainName: addressValue.domainName,
-          filterValue: addressValue.filterValue
-        })
-      }
-      {
-        extraSelectOptions ? extraSelectOptions.map(buildSelectOption) : <></>
-      }
-    </Select>
+        }
+          {
+          extraSelectOptions ? extraSelectOptions.map(buildSelectOption) : <></>
+        }
+        </Select>
+        {showQrCodeScanner && <QrCodeScanner shouldInit onScan={onScan} />}
+      </Space>
+    </>
   )
 }
 

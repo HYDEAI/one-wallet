@@ -10,6 +10,7 @@ import ONEConstants from '../../../lib/constants'
 import About from './Show/About'
 import Recovery from './Show/Recovery'
 import DoRecover from './Show/DoRecover'
+import Call from './Show/Call'
 import Warnings from './Show/Warnings'
 
 import AnimatedSection from '../components/AnimatedSection'
@@ -24,12 +25,29 @@ import WalletTitle from '../components/WalletTitle'
 import PurchaseDomain from './Show/PurchaseDomain'
 import Upgrade from './Show/Upgrade'
 import TransferDomain from './Show/TransferDomain'
+import Sign from './Show/Sign'
+import Swap from './Show/Swap'
+import Gift from './Show/Gift'
+import { message } from 'antd'
+import QRCode from './Show/QRCode'
+import Scan from './Show/Scan'
 
-const tabList = [{ key: 'coins', tab: 'Coins' }, { key: 'nft', tab: 'Collectibles' }, { key: 'about', tab: 'About' }, { key: 'help', tab: 'Recover' }]
+const tabList = [
+  { key: 'coins', tab: 'Coins' },
+  { key: 'nft', tab: 'Collectibles' },
+  { key: 'about', tab: 'About' },
+  { key: 'help', tab: 'Recover' },
+  { key: 'swap', tab: 'Swap' },
+  { key: 'gift', tab: 'Gift' },
+  { key: 'qr' },
+  { key: 'scan' }
+]
+
 const Show = () => {
   const history = useHistory()
   const location = useLocation()
   const dispatch = useDispatch()
+  const dev = useSelector(state => state.wallet.dev)
   const wallets = useSelector(state => state.wallet.wallets)
   const match = useRouteMatch(Paths.show)
   const { address: routeAddress, action } = match ? match.params : {}
@@ -40,6 +58,7 @@ const Show = () => {
   const [section, setSection] = useState(action)
   const network = useSelector(state => state.wallet.network)
   const [activeTab, setActiveTab] = useState('coins')
+  const { temp, forwardAddress } = wallet
 
   useEffect(() => {
     if (!wallet) {
@@ -54,6 +73,15 @@ const Show = () => {
     dispatch(walletActions.fetchWallet({ address }))
     return () => { clearInterval(handler) }
   }, [])
+
+  useEffect(() => {
+    if (forwardAddress && forwardAddress !== ONEConstants.EmptyAddress && !temp) {
+      dispatch(walletActions.updateWallet({ ...wallet, address: forwardAddress, forwardAddress: ONEConstants.EmptyAddress }))
+      dispatch(walletActions.deleteWallet(address))
+      message.success('Detected upgraded version of this wallet. Redirecting there...')
+      setTimeout(() => history.push(Paths.showAddress(forwardAddress)), 500)
+    }
+  }, [temp, forwardAddress])
 
   const selectedToken = wallet?.selectedToken || HarmonyONE
 
@@ -79,13 +107,18 @@ const Show = () => {
     return <Redirect to={Paths.wallets} />
   }
 
+  let displayTabList = tabList.filter(e => e.tab)
+  if (dev) {
+    displayTabList = displayTabList.filter(e => !e.dev)
+  }
+
   return (
     <>
       <AnimatedSection
         show={!section}
-        title={<WalletTitle address={address} />}
+        title={<WalletTitle address={address} onQrCodeClick={() => showTab('qr')} onScanClick={() => showTab('scan')} />}
         style={{ minHeight: 320, maxWidth: 720 }}
-        tabList={tabList}
+        tabList={displayTabList}
         activeTabKey={activeTab}
         onTabChange={key => showTab(key)}
       >
@@ -95,6 +128,10 @@ const Show = () => {
         {activeTab === 'coins' && <ERC20Grid address={address} />}
         {activeTab === 'nft' && <NFTGrid address={address} />}
         {activeTab === 'help' && <Recovery address={address} />}
+        {activeTab === 'swap' && <Swap address={address} />}
+        {activeTab === 'gift' && <Gift address={address} />}
+        {activeTab === 'qr' && <QRCode address={address} name={wallet.name} />}
+        {activeTab === 'scan' && <Scan address={address} />}
         <Upgrade address={address} />
       </AnimatedSection>
 
@@ -111,6 +148,8 @@ const Show = () => {
         address={address}
         onClose={showStartScreen}
       />
+      {dev && <Call address={address} show={section === 'call'} onClose={showStartScreen} />}
+      {dev && <Sign address={address} show={section === 'sign'} onClose={showStartScreen} />}
     </>
   )
 }

@@ -63,7 +63,7 @@ library WalletGraph {
         emit BackLinkAltered(new address[](0), new address[](0));
     }
 
-    function reclaimDomainFromBacklink(IONEWallet[] storage backlinkAddresses, uint32 backlinkIndex, IRegistrar reg, IReverseRegistrar rev, uint8 subdomainLength, bytes memory data) public {
+    function reclaimDomainFromBacklink(IONEWallet[] storage backlinkAddresses, uint32 backlinkIndex, IRegistrar reg, IReverseRegistrar rev, bytes memory data) public {
         if (backlinkIndex >= backlinkAddresses.length) {
             emit InvalidBackLinkIndex(backlinkIndex);
             return;
@@ -80,5 +80,20 @@ library WalletGraph {
         }
         // reclaim reverse domain for the domain
         DomainManager.reclaimReverseDomain(address(rev), fqdn);
+    }
+
+    function command(IONEWallet[] storage backlinkAddresses, TokenType tokenType, address contractAddress, uint256 tokenId, address payable dest, uint256 amount, bytes calldata data) public {
+        (address backlink, uint16 operationType, bytes memory commandData) = abi.decode(data, (address, uint16, bytes));
+        if (findBacklink(backlinkAddresses, backlink) == backlinkAddresses.length) {
+            emit CommandFailed(backlink, "Not linked", commandData);
+            return;
+        }
+        try IONEWallet(backlink).reveal(new bytes32[](0), 0, bytes32(0), OperationType(operationType), tokenType, contractAddress, tokenId, dest, amount, commandData){
+            emit CommandDispatched(backlink, commandData);
+        }catch Error(string memory reason){
+            emit CommandFailed(backlink, reason, commandData);
+        }catch {
+            emit CommandFailed(backlink, "", commandData);
+        }
     }
 }
