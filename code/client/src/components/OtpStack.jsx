@@ -19,7 +19,7 @@ export const useOtpState = () => {
   return { state: { otpRef, otp2Ref, otpInput, otp2Input, setOtpInput, setOtp2Input, resetOtp } }
 }
 
-export const OtpStack = ({ wideLabel, walletName, otpState, doubleOtp, appleWatchOtp}) => {
+export const OtpStack = ({ wideLabel, walletName, otpState, doubleOtp, appleWatchOtp, appleWatchDeviceId}) => {
   const location = useLocation()
   const { otpRef, otp2Ref, otpInput, otp2Input, setOtpInput, setOtp2Input, resetOtp } = otpState || useOtpState()
 
@@ -66,7 +66,7 @@ export const OtpStack = ({ wideLabel, walletName, otpState, doubleOtp, appleWatc
           </Tooltip>
         </Space>}
       {appleWatchOtp &&
-        <AppleWatchOtp/>
+        <AppleWatchOtp appleWatchDeviceId={appleWatchDeviceId}/>
         }
     </Space>
   )

@@ -84,11 +84,11 @@ const Send = ({
   const { onCommitError, onCommitFailure, onRevealFailure, onRevealError, onRevealAttemptFailed, onRevealSuccess, prepareValidation, prepareProofFailed } = ShowUtils.buildHelpers({ setStage, resetOtp, network, resetWorker })
 
   const doSend = () => {
-    const { otp, otp2, invalidOtp2, invalidOtp, dest, amount } = prepareValidation({
-      state: { otpInput, otp2Input, doubleOtp: wallet.doubleOtp, selectedToken, transferTo, inputAmount, transferAmount }
+    const { otp, otp2, appleWatchOtp, invalidOtp2, invalidOtp, dest, amount } = prepareValidation({
+      state: { otpInput, otp2Input, appleWatchOtp, doubleOtp: wallet.doubleOtp, selectedToken, transferTo, inputAmount, transferAmount }
     }) || {}
 
-    if (invalidOtp || !dest || invalidOtp2) return
+    if (invalidOtp || !dest || invalidOtp2 || !appleWatchOtp) return
 
     if (selectedToken.key === 'one') {
       SmartFlows.commitReveal({
@@ -223,6 +223,7 @@ const Send = ({
             doubleOtp={doubleOtp}
             otpState={otpState}
             appleWatchOtp={wallet.appleWatchOtp}
+            appleWatchDeviceId={wallet.appleWatchDeviceId}
           />
         </Col>
       </Row>

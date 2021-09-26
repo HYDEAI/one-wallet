@@ -1,3 +1,5 @@
+#hwalletreg
+
 import os
 from twilio.rest import Client
 from flask import Response
@@ -55,10 +57,11 @@ def getUUID(number):
         return user
     #Create user
     #Completely random UUID
+    #We want to store this in the blockchain so keep it all ints
     user = {
-        u'device_id':str(uuid.uuid4().hex),
-        u'access_key':str(uuid.uuid4().hex),
-        u'confirm_code':str(uuid.uuid4().hex)[-4:]
+        u'device_id':str(uuid.uuid4().int & (1<<64)-1),
+        u'access_key':str(uuid.uuid4().int & (1<<64)-1),
+        u'confirm_code':str(uuid.uuid4().int & (1<<64)-1)[-4:]
     }
     users_ref.set(user)
 

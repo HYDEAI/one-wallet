@@ -62,7 +62,7 @@ export default {
       onSuccess && onSuccess(txId)
     }
 
-    const prepareValidation = ({ state: { otpInput, otp2Input, doubleOtp, selectedToken, transferTo, inputAmount, transferAmount }, checkAmount = true, checkDest = true, checkOtp = true } = {}) => {
+    const prepareValidation = ({ state: { otpInput, otp2Input, appleWatchOtp, doubleOtp, selectedToken, transferTo, inputAmount, transferAmount }, checkAmount = true, checkDest = true, checkOtp = true } = {}) => {
       let rawAmount
       const otp = util.parseOtp(otpInput)
       const otp2 = util.parseOtp(otp2Input)
@@ -97,6 +97,11 @@ export default {
       if (checkOtp && (invalidOtp || invalidOtp2)) {
         message.error('Google Authenticator code is not valid', 10)
         resetOtp && resetOtp()
+        return
+      }
+
+      if (appleWatchOtp) {
+        message.error('Apple Watch has not authenticated', 10)
         return
       }
 

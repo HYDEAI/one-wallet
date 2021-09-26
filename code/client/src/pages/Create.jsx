@@ -471,6 +471,16 @@ const Create = ({ expertMode, showRecovery }) => {
               value={otp}
               onChange={setOtp}
             />
+            <Checkbox onChange={() => setAppleWatchOtp(!appleWatchOtp)}>
+              <Space>
+                <Hint>
+                  Use your apple watch to confirm transactions
+                </Hint>
+                <Tooltip title={<div>In addition to google authentication, you will need your apple watch to enter the code from your wallet</div>}>
+                  <QuestionCircleOutlined />
+                </Tooltip>
+              </Space>
+            </Checkbox>
             {appleWatchOtp && !appleWatchOtpRegistered &&
                 <Space>
                   <ConfigProvider locale={en}>
@@ -508,7 +518,7 @@ const Create = ({ expertMode, showRecovery }) => {
               }
               {appleWatchOtp && deviceRegistered &&
                 <Space>
-                  ✅ Phone and Apple Device ready to link to this wallet.
+                  Phone and Apple Device ready to link to this wallet. ✅
                 </Space>
               }
             {isMobile && <Button type='default' shape='round' icon={<SnippetsOutlined />} onClick={() => { navigator.clipboard.readText().then(t => setOtp(t)) }}>Paste from Clipboard</Button>}
