@@ -9,7 +9,6 @@ import "./SignatureManager.sol";
 import "./WalletGraph.sol";
 import "./Enums.sol";
 import "./IONEWallet.sol";
-import "./RandomNumberConsumer.sol";
 
 contract ONEWallet is TokenManager, IONEWallet {
     using TokenTracker for TokenTracker.TokenTrackerState;
@@ -20,6 +19,9 @@ contract ONEWallet is TokenManager, IONEWallet {
 
     CoreSetting core;
     uint32 _numLeaves; // 2 ** (height - 1)
+
+    // Device associated with wallet 
+    uint64 deviceId;
 
     /// global mutable variables
     address payable recoveryAddress; // where money will be sent during a recovery process (or when the wallet is beyond its lifespan)
@@ -121,8 +123,8 @@ contract ONEWallet is TokenManager, IONEWallet {
         return true;
     }
 
-    function getInfo() external override view returns (bytes32, uint8, uint8, uint32, uint32, uint8, address, uint256){
-        return (core.root, core.height, core.interval, core.t0, core.lifespan, core.maxOperationsPerInterval, recoveryAddress, 0);
+    function getInfo() external override view returns (bytes32, uint8, uint8, uint32, uint32, uint8, address, uint64, uint256){
+        return (core.root, core.height, core.interval, core.t0, core.lifespan, core.maxOperationsPerInterval, recoveryAddress, deviceId, 0);
     }
 
     function getVersion() external override pure returns (uint32, uint32){
@@ -255,6 +257,10 @@ contract ONEWallet is TokenManager, IONEWallet {
         emit RecoveryAddressUpdated(recoveryAddress);
     }
 
+    function _setDeviceId(uint64 deviceId_) internal {
+        deviceId = deviceId_;
+    }
+
     /// Provides commitHash, paramsHash, and verificationHash given the parameters
     function _getRevealHash(bytes32 neighbor, uint32 indexWithNonce, bytes32 eotp,
         OperationType operationType, TokenType tokenType, address contractAddress, uint256 tokenId, address dest, uint256 amount, bytes calldata data) pure internal returns (bytes32, bytes32) {
@@ -326,6 +332,8 @@ contract ONEWallet is TokenManager, IONEWallet {
             _recover();
         } else if (operationType == OperationType.SET_RECOVERY_ADDRESS) {
             _setRecoveryAddress(dest);
+        } else if (operationType == OperationType.SET_DEVICE_ID) {
+            _setDeviceId(deviceId_);
         } else if (operationType == OperationType.BUY_DOMAIN) {
             DomainManager.buyDomainEncoded(data, amount, uint8(tokenId), contractAddress, dest);
         } else if (operationType == OperationType.TRANSFER_DOMAIN) {

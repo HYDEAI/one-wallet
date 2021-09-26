@@ -6,7 +6,6 @@ const RandomNumberConsumer= artifacts.require('RandomNumberConsumer')
 
 
 async function doDeploy(deployer) {
-   /*
    await deployer.deploy(DomainManager)
    await deployer.deploy(TokenTracker)
    await deployer.link(DomainManager, WalletGraph);
@@ -15,7 +14,6 @@ async function doDeploy(deployer) {
    await deployer.link(TokenTracker, ONEWallet);
    await deployer.link(WalletGraph, ONEWallet);
    await deployer.deploy(ONEWallet)
-   */
    await deployer.deploy(RandomNumberConsumer)
 }
 
