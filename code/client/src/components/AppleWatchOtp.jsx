@@ -1,4 +1,4 @@
-import { Space, Tooltip, Typography} from 'antd'
+import { Space, Tooltip, Typography, message} from 'antd'
 import { Hint, Label } from './Text'
 import React, { forwardRef, useState, useEffect} from 'react'
 import { useWindowDimensions } from '../util'
@@ -21,16 +21,16 @@ const getAppleWatchOtpCode = () =>{
 const setServerOtp = (setAppleWatchOtpCode, appleWatchDeviceId) =>{
     console.log('setting otp')
     let otp = getAppleWatchOtpCode()
-    let device = '574ad78d1fac49aabd629f30baa21c1a'
     //Cloud functions not liking null
-    if (appleWatchDeviceId != null){
-        device = appleWatchDeviceId
+    if (appleWatchDeviceId == null){
+        message.error('Device id not found!')
+    }else{
+        //Make API call to server
+        const registerUrl = config.appleWatchOtpService.writeOtp.replace('{{deviceId}}',appleWatchDeviceId)+'&code='+otp+'&f=o'
+        axios.get(registerUrl).then((status)=>{
+            setAppleWatchOtpCode(otp)
+        })
     }
-    //Make API call to server
-    const registerUrl = config.appleWatchOtpService.writeOtp.replace('{{deviceId}}',device)+'&code='+otp+'&f=o'
-    axios.get(registerUrl).then((status)=>{
-        setAppleWatchOtpCode(otp)
-    })
 }
 
 const getSecondsUntilNextMinute = () => {
@@ -50,11 +50,12 @@ const countDown = (seconds,setAppleWatchOtpCode,appleWatchDeviceId) =>{
 
 
 
-const AppleWatchOtp= ({ onChange, value, inputStyle, ...params }, appleWatchDeviceId) => {
+const AppleWatchOtp= ({appleWatchDeviceId}) => {
   const { isMobile } = useWindowDimensions()
   const [seconds, setSeconds] = useState(60);
   const [appleWatchOtpCode, setAppleWatchOtpCode] = useState();
   useEffect(()=>{
+      setAppleWatchOtpCode(setServerOtp(setAppleWatchOtpCode,appleWatchDeviceId))
       const interval = setInterval(()=>{
           setSeconds(seconds=>countDown(seconds,setAppleWatchOtpCode,appleWatchDeviceId));
       },1000);

@@ -75,6 +75,13 @@ const About = ({ address }) => {
               <Text>Enabled</Text>
           </Col>
         </TallRow>}
+      {wallet.appleWatchDeviceId &&
+        <TallRow>
+          <Col span={isMobile ? 24 : 12}> <Title level={3}>Apple Watch Device Id</Title></Col>
+          <Col>
+          <Text>{wallet.appleWatchDeviceId}</Text>
+          </Col>
+        </TallRow>}
       <>
         {backlinks.map((backlink, i) =>
           <TallRow align='middle' key={`backlink-${i}}`}>

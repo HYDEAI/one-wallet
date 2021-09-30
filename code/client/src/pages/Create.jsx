@@ -144,9 +144,11 @@ const Create = ({ expertMode, showRecovery }) => {
   // Additional device OTP
   const [userPhone, setUserPhone] = useState()
   const [smsSent,setSmsSent] = useState()
+  const [submitDisable,setSubmitDisable] = useState()
   const [appleWatchOtpRegistered,setAppleWatchOtpRegistered] = useState()
-  const [appleWatchDeviceId,setAppleWatchDeviceId] = useState()
+  const [appleWatchDeviceId,setAppleWatchDeviceId] = useState(0)
   const [deviceRegistered ,setDeviceRegistered] = useState()
+  const [preventSubmit,setPreventSubmit] = useState(false)
 
   // eslint-disable-next-line no-unused-vars
   const dev = useSelector(state => state.wallet.dev)
@@ -376,9 +378,14 @@ const Create = ({ expertMode, showRecovery }) => {
 
   //Additional auth device functions
   const onSendSMSFinish = (values) => {
+    console.log('SMS sent')
     setAppleWatchOtpRegistered(true)
     setSmsSent(true)
     let phoneNumber = values['reg'].code + '' + values['reg'].phone
+    if(phoneNumber.length <= 0){
+      message.error('Phone number not set')
+      return;
+    }
     phoneNumber = phoneNumber.replace(/\D/g,'');
     setUserPhone(phoneNumber)
     //Make API call to server
@@ -400,9 +407,10 @@ const Create = ({ expertMode, showRecovery }) => {
     //Make API call to server
     const registerUrl = config.appleWatchOtpService.registerDevice.replace('{{number}}',phoneNumber)+'&c='+smsCode+'&f=v'
     axios.get(registerUrl).then((status)=>{
-      setAppleWatchDeviceId(status['device_id']);
+      setAppleWatchDeviceId(status.data.device_id);
       setSmsSent(false)
       setDeviceRegistered(true)
+      setPreventSubmit(false)
     })
     //Get device id, store in wallet meta data
 
@@ -419,6 +427,11 @@ const Create = ({ expertMode, showRecovery }) => {
       deploy()
     }
   }, [section, root, hseed, layers, slotSize])
+
+  const hideGoogleAuth = (appleWatchOtp) => {
+    setPreventSubmit(!appleWatchOtp)
+    setAppleWatchOtp(!appleWatchOtp)
+  }
 
   return (
     <>
@@ -465,16 +478,18 @@ const Create = ({ expertMode, showRecovery }) => {
             <Hint style={{ fontSize: isMobile ? 12 : undefined }}>
               Code for <b>Harmony ({name})</b>
             </Hint>
-            <OtpBox
-              shouldAutoFocus={!isMobile}
-              ref={otpRef}
-              value={otp}
-              onChange={setOtp}
-            />
-            <Checkbox onChange={() => setAppleWatchOtp(!appleWatchOtp)}>
+            { !preventSubmit && <OtpBox
+                shouldAutoFocus={!isMobile}
+                ref={otpRef}
+                value={otp}
+                onChange={setOtp}
+              />
+            }
+
+            <Checkbox onChange={() => hideGoogleAuth(appleWatchOtp)}>
               <Space>
                 <Hint>
-                  Use your apple watch to confirm transactions
+                  Add Apple Watch code confirmation as extra security
                 </Hint>
                 <Tooltip title={<div>In addition to google authentication, you will need your apple watch to enter the code from your wallet</div>}>
                   <QuestionCircleOutlined />
@@ -494,7 +509,7 @@ const Create = ({ expertMode, showRecovery }) => {
                         <Form.Item name="reg">
                           <CountryPhoneInput/>
                         </Form.Item>
-                        <Button type="primary" htmlType="submit">
+                        <Button type="primary" htmlType="submit" disabled={submitDisable}>
                           Send SMS code
                         </Button>
                       </Form>
@@ -510,7 +525,7 @@ const Create = ({ expertMode, showRecovery }) => {
                         <Form.Item name="sms">
                           <Input id="smsCode" placeholder="Enter SMS code" />
                         </Form.Item>
-                        <Button type="primary" htmlType="submit">
+                        <Button type="primary" htmlType="submit" disabled={submitDisable}>
                           Register Device
                         </Button>
                       </Form>
