@@ -1,3 +1,5 @@
+#hwalletreg
+
 import os
 from twilio.rest import Client
 from flask import Response
@@ -33,13 +35,13 @@ msg_sid = os.getenv('TWILIO_MSG_SID')
 t_client = Client(account_sid, auth_token)
 
 
-control_url = "https://us-central1-brother-nft.cloudfunctions.net/harmony-watch/?k="
+control_url = "https://us-central1-brother-nft.cloudfunctions.net/hwatch/?k="
 
 #Get new UUID
 #Register user to firebase
 
 def getMsg(unique_key,number):
-    return "Harmony Wallet, don't loose this link: "+control_url+unique_key+'&id='+number
+    return "Unlock link: "+control_url+unique_key+'&id='+number
 
 def getUUID(number):
 
