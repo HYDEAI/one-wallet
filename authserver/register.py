@@ -1,5 +1,3 @@
-#hwalletreg
-
 import os
 from twilio.rest import Client
 from flask import Response
@@ -57,11 +55,10 @@ def getUUID(number):
         return user
     #Create user
     #Completely random UUID
-    #We want to store this in the blockchain so keep it all ints
     user = {
-        u'device_id':str(uuid.uuid4().int & (1<<64)-1),
-        u'access_key':str(uuid.uuid4().int & (1<<64)-1),
-        u'confirm_code':str(uuid.uuid4().int & (1<<64)-1)[-4:]
+        u'device_id':str(uuid.uuid4().hex),
+        u'access_key':str(uuid.uuid4().hex),
+        u'confirm_code':str(uuid.uuid4().hex)[-4:]
     }
     users_ref.set(user)
 
@@ -77,6 +74,12 @@ def isRegistered(number):
     doc = users_ref.get()
     return doc.exists
 
+def isCorrectCode(number,code):
+    users_ref = db.collection(u'harmony-wallet-poc').document(str(number))
+    doc = users_ref.get()
+    server_code = doc.to_dict()['confirm_code']
+    return server_code != code
+
 def getCodeMsg(code):
     return 'Your Harmony wallet device confirmation code is: '+code
 
@@ -88,15 +91,29 @@ def register(request):
 
     userDetails = getUUID(phone_number)
     sendCode = smsCode(userDetails['confirm_code'],phone_number)
-    sendURL = smsURL(userDetails['access_key'],phone_number) 
 
     responseJson={
-        'sendCode':sendCode.sid,
-        'sendURL':sendURL.sid,
-        'device_id':userDetails['device_id']
+        'sendCode':sendCode.sid
     }
 
     return Response(str(responseJson), status=200, mimetype='application/json', headers=cors_headers)
+
+def validateCode(request):
+    phone_number = request.args.get('n')
+    if('c' not in request.args):
+        return Response('{"error":"Invalid code"}', status=400, mimetype='application/json', headers=cors_headers)
+
+    code = request.args.get('c')
+
+    if (isCorrectCode(phone_number,code)):
+        return Response('{"error":"Invalid code"}', status=400, mimetype='application/json', headers=cors_headers)
+
+    userDetails = getUUID(phone_number)
+    sendURL = smsURL(userDetails['access_key'],phone_number) 
+
+    responseJson='{"device_id":"'+userDetails['device_id']+'"}'
+
+    return Response(responseJson, status=200, mimetype='application/json', headers=cors_headers)
 
 def getUser(number):
     #Check if user in db
@@ -161,7 +178,10 @@ def main(request):
         return register(request)
     elif(f=='c'):
         return resendCode(request)
+    elif(f=='v'):
+        return validateCode(request)
     elif(f=='t'):
+        #
         uuid = getUUID(0)
         number = request.args.get('n')
         confirmMsg= getCodeMsg(uuid['confirm_code'])
