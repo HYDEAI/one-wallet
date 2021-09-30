@@ -1,0 +1,107 @@
+body{
+  background:grey;
+  font-family:Arial;
+}
+
+.noselect {
+  -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+     -khtml-user-select: none; /* Konqueror HTML */
+       -moz-user-select: none; /* Old versions of Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none; /* Non-prefixed version, currently
+                                  supported by Chrome, Edge, Opera and Firefox */
+}
+
+#apple-watch{
+  margin:20px;
+  width:272px;
+  height:340px;
+  background:black;
+  border-radius:5px;
+  color:white;
+}
+
+#dots{
+  padding-top:5px;
+  padding-bottom:9px;
+  height:20px;
+}
+#dots ul{
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width:95px;
+}
+ul, ul li{
+  padding:0px;
+  margin-block-end:0px;
+  margin-block-start:0px;
+}
+
+#dots ul li{
+  display:inline-block;
+  width:20px;
+  height:20px;
+  background:white;
+  border-radius:10px;
+  margin-left:3px;
+  text-align:center;
+}
+#numpad{
+ margin-left:1px; 
+}
+#numpad ul li:active{
+  opacity:50%;
+}
+#numpad ul li{
+  cursor:pointer;
+  font-size:35px;
+  font-weight:bold;
+  display:inline-block;
+  width:87px;
+  height:35px;
+  padding-top:16px;
+  padding-bottom:16px;
+  margin-left:0px;
+  margin-bottom:1px;
+  text-align:center;
+  background:#303030;
+  border-radius:10px;
+}
+#numpad ul li.newrow{
+  margin-left:0px;
+}
+#numpad ul li.ok{
+  color:#00ce67;
+  background:black;
+}
+#numpad ul li.back{
+  color:#fd322b;
+  background:black;
+  font-size:37px;
+  padding-top:0px;
+}
+#numpad ul li.back span{
+  background:#fd322b;
+  display:inline-block;
+  margin-left:-8px;
+  width:30px;
+  height:36px;
+  color:black;
+  font-size:35px;
+  border-radius:2px;
+}
+
+#cancel:active{
+  opacity:50%;
+}
+#cancel{
+  background:#303030;
+  border-radius:10px;
+  font-size:20px;
+  font-weight:bold;
+  text-align:center;
+  margin-top:1px;
+  padding:5px;
+}

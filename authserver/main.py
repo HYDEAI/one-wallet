@@ -14,7 +14,7 @@ project_id = 'brother-nft'
 #Connect to firebase
 #Local dev
 if DMODE == 'dev':
-    print('local dev mode')
+    print('local dev mode harmony-authenticate')
     cred = credentials.Certificate('../.././serviceAccount.json')
     firebase_admin.initialize_app(cred)
 
@@ -87,14 +87,21 @@ def authorize(request):
 
 def checkAuth(request):
     if request.args and 'id' in request.args:
-        user_id = request.args.get('id')
-        if(user_id in db):
-            now = datetime.now()
-            current_time = now.strftime("%Y%H%M")
-            if(current_time in db[user_id]
-                and 'auth' in db[user_id][current_time]):
+        deviceId = request.args.get('id')
+        device_ref = db.collection(u'harmony-wallet-poc').document(str(deviceId))
+        doc = device_ref.get()
+        device_obj = doc.to_dict()
+        if doc.exists:
+            print(device_obj)
+            if('auth' in device_obj):
+                now = datetime.now()
+                #Can't rely on time as cloud function can be anywhere
+                #current_time = now.strftime("%Y%H%M")
+                #print(current_time)
+                #if(current_time in device_obj):
                 return Response('{"check":1}', status=200, mimetype='application/json', headers=cors_headers)
-    return Response('{"check":0}', status=304, mimetype='application/json', headers=cors_headers)
+            return Response('{"check":0}', status=200, mimetype='application/json', headers=cors_headers)
+    return Response('{"Status":"Device not found"}', status=400, mimetype='application/json', headers=cors_headers)
 
 
 
@@ -102,6 +109,7 @@ def checkAuth(request):
 cors_headers = {
     'Access-Control-Allow-Origin': '*'
 }
+
 
 
 def main(request):

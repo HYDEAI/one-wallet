@@ -63,6 +63,8 @@ const Send = ({
   const maxSpending = util.getMaxSpending(wallet)
   const { formatted: spendingLimitFormatted } = util.computeBalance(maxSpending, price)
 
+  const [appleWatchOtpState,setAppleWatchOtpState] = useState(!wallet.appleWatchOtp)
+
   const {
     balance: transferAmount,
     fiatFormatted: transferFiatAmountFormatted
@@ -84,11 +86,11 @@ const Send = ({
   const { onCommitError, onCommitFailure, onRevealFailure, onRevealError, onRevealAttemptFailed, onRevealSuccess, prepareValidation, prepareProofFailed } = ShowUtils.buildHelpers({ setStage, resetOtp, network, resetWorker })
 
   const doSend = () => {
-    const { otp, otp2, appleWatchOtp, invalidOtp2, invalidOtp, dest, amount } = prepareValidation({
-      state: { otpInput, otp2Input, appleWatchOtp, doubleOtp: wallet.doubleOtp, selectedToken, transferTo, inputAmount, transferAmount }
+    const { otp, otp2, appleWatchOtp, invalidAppleWatchOtp, invalidOtp2, invalidOtp, dest, amount } = prepareValidation({
+      state: { otpInput, otp2Input, appleWatchOtp, invalidAppleWatchOtp, doubleOtp: wallet.doubleOtp, selectedToken, transferTo, inputAmount, transferAmount }
     }) || {}
 
-    if (invalidOtp || !dest || invalidOtp2 || !appleWatchOtp) return
+    if (invalidOtp || !dest || invalidOtp2 || !appleWatchOtpState) return
 
     if (selectedToken.key === 'one') {
       SmartFlows.commitReveal({
@@ -224,6 +226,7 @@ const Send = ({
             otpState={otpState}
             appleWatchOtp={wallet.appleWatchOtp}
             appleWatchDeviceId={wallet.appleWatchDeviceId}
+            setAppleWatchOtpState={setAppleWatchOtpState}
           />
         </Col>
       </Row>

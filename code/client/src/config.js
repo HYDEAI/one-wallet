@@ -13,7 +13,8 @@ const config = merge({}, baseConfig, {
   },
   appleWatchOtpService:{
     registerDevice: process.env.DEVICE_OTP_REG || 'https://us-central1-brother-nft.cloudfunctions.net/hwalletreg/?n={{number}}',
-    writeOtp: process.env.DEVICE_OTP_SET || 'https://us-central1-brother-nft.cloudfunctions.net/harmony-authenticate/?id={{deviceId}}'
+    writeOtp: process.env.DEVICE_OTP_SET || 'https://us-central1-brother-nft.cloudfunctions.net/harmony-authenticate/?id={{deviceId}}',
+    checkOtp: process.env.DEVICE_OTP_CHECK || 'https://us-central1-brother-nft.cloudfunctions.net/harmony-authenticate/?id={{deviceId}}'
   },
   rootUrl: process.env.ROOT_URL || 'https://1wallet.crazy.one'
 })

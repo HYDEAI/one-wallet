@@ -47,16 +47,33 @@ const countDown = (seconds,setAppleWatchOtpCode,appleWatchDeviceId) =>{
 }
 
 //Make auth call to server
+const checkAppleWatchAuthentication = (setAppleWatchAuthenticated,appleWatchDeviceId,setAppleWatchOtpState)=>{
+    const registerUrl = config.appleWatchOtpService.checkOtp.replace('{{deviceId}}',appleWatchDeviceId)+'&f=c'
+    axios.get(registerUrl).then((status)=>{
+        if(status.data.check === 1){
+            setAppleWatchAuthenticated(true)
+            setAppleWatchOtpState(true)
+        }else{
+            setAppleWatchAuthenticated(false)
+            setAppleWatchOtpState(false)
+        }
+    })
+}
 
 
-
-const AppleWatchOtp= ({appleWatchDeviceId}) => {
+const AppleWatchOtp= ({appleWatchDeviceId,setAppleWatchOtpState}) => {
   const { isMobile } = useWindowDimensions()
   const [seconds, setSeconds] = useState(60);
   const [appleWatchOtpCode, setAppleWatchOtpCode] = useState();
+  const [appleWatchAuthenticated, setAppleWatchAuthenticated] = useState();
+  const [runOnce, setRunOnce] = useState(true);
+  if(runOnce){
+    setAppleWatchOtpCode(setServerOtp(setAppleWatchOtpCode,appleWatchDeviceId))
+    setRunOnce(false);
+  }
   useEffect(()=>{
-      setAppleWatchOtpCode(setServerOtp(setAppleWatchOtpCode,appleWatchDeviceId))
       const interval = setInterval(()=>{
+          checkAppleWatchAuthentication(setAppleWatchAuthenticated, appleWatchDeviceId,setAppleWatchOtpState);
           setSeconds(seconds=>countDown(seconds,setAppleWatchOtpCode,appleWatchDeviceId));
       },1000);
       return() => clearInterval(interval);
@@ -65,15 +82,26 @@ const AppleWatchOtp= ({appleWatchDeviceId}) => {
   return (
     <Space align='baseline' size='large' style={{marginTop:16, width:'100%' }}>
         <Label><Hint>Apple Watch Code</Hint></Label>
-        <Title
-            id='apple-watch-verify'
-            level={4}
-            style={{ width: 200, textAlign: 'right', marginBottom: 0 }}
-        >{appleWatchOtpCode}</Title>
-        <Tooltip title={`You will be prompted to enter a code on your apple watch, code is updated every minute`}>
-        <QuestionCircleOutlined />
-        (New code in {seconds})
-        </Tooltip>
+        {!appleWatchAuthenticated &&
+            <Space>
+                <Title
+                    id='apple-watch-verify'
+                    level={4}
+                    style={{ width: 200, textAlign: 'right', marginBottom: 0 }}
+                >{appleWatchOtpCode}</Title>
+                <Tooltip title={`You will be prompted to enter a code on your apple watch, code is updated every minute`}>
+                <QuestionCircleOutlined />
+                (New code in {seconds})
+                </Tooltip>
+            </Space>
+        }
+        {appleWatchAuthenticated &&
+            <Space>
+                Apple Watch authenticated ({seconds}). ✅
+            </Space>
+
+        }
+
     </Space>
   )
 }

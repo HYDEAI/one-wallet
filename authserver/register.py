@@ -33,13 +33,13 @@ msg_sid = os.getenv('TWILIO_MSG_SID')
 t_client = Client(account_sid, auth_token)
 
 
-control_url = "https://us-central1-brother-nft.cloudfunctions.net/harmony-auth/?w="
+control_url = "https://us-central1-brother-nft.cloudfunctions.net/harmony-watch/?k="
 
 #Get new UUID
 #Register user to firebase
 
 def getMsg(unique_key,number):
-    return "Harmony Wallet, don't loose this link: "+control_url+unique_key+'&n='+number
+    return "Harmony Wallet, don't loose this link: "+control_url+unique_key+'&id='+number
 
 def getUUID(number):
 
@@ -109,7 +109,7 @@ def validateCode(request):
         return Response('{"error":"Invalid code"}', status=400, mimetype='application/json', headers=cors_headers)
 
     userDetails = getUUID(phone_number)
-    sendURL = smsURL(userDetails['access_key'],phone_number) 
+    sendURL = smsURL(userDetails['access_key'],phone_number,userDetails['device_id']) 
 
     responseJson='{"device_id":"'+userDetails['device_id']+'"}'
 
@@ -132,12 +132,13 @@ def smsCode(confirm_code,phone_number):
     return t_client.messages.create(  
                               messaging_service_sid=msg_sid, 
                               body=getCodeMsg(confirm_code),      
-                              to=phone_number)
+                              to=phone_number,
+                              )
 
-def smsURL(access_key,phone_number):
+def smsURL(access_key,phone_number,device_id):
     return t_client.messages.create(  
                               messaging_service_sid=msg_sid, 
-                              body=getMsg(access_key,phone_number),      
+                              body=getMsg(access_key,device_id),      
                               to=phone_number
                           ) 
 

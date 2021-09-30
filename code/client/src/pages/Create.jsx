@@ -506,8 +506,8 @@ const Create = ({ expertMode, showRecovery }) => {
                         reg:{ short:'ca',code:1,phone:''}
                       }}
                       >
-                        <Form.Item name="reg">
-                          <CountryPhoneInput/>
+                        <Form.Item name="reg"  >
+                          <CountryPhoneInput autoComplete="off"/>
                         </Form.Item>
                         <Button type="primary" htmlType="submit" disabled={submitDisable}>
                           Send SMS code
@@ -523,7 +523,7 @@ const Create = ({ expertMode, showRecovery }) => {
                       onFinishFailed={onFinishFailed}
                       >
                         <Form.Item name="sms">
-                          <Input id="smsCode" placeholder="Enter SMS code" />
+                          <Input id="smsCode" autocomplete="off" placeholder="Enter SMS code" />
                         </Form.Item>
                         <Button type="primary" htmlType="submit" disabled={submitDisable}>
                           Register Device
